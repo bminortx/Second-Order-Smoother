@@ -2,6 +2,8 @@
 # a second-order smoothing term
 # This paper was a great help:
 # http://bit.ly/1uMjmsN
+# OpenCV makes it easy to do these kinds of operations:
+# http://bit.ly/1vZAjSU
 
 import numpy as np
 import scipy.linalg
