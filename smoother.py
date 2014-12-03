@@ -25,15 +25,11 @@ def blurImage(fn):
 
 # Elegantly programmed norm from http://bit.ly/1xuPoqn
 # Do this element-wise through the full image
-def huberLoss(eig_x, eig_y):
+def huberLoss(eigs):
   c = 2;
   dy = 1;
-  eigs = np.linalg.norm((eig_x[:], eig_y[:]), 2, axis=0);
-  y_fit = np.ones((1, eig_x.shape[0]))
-  print eigs
-  print y_fit
+  y_fit = np.ones((eigs.shape))
   t = abs((eigs - y_fit) / dy);
-  print t
   flag = t > c;
   # We don't want the sum, just the element-wise norm
   # np.sum((~flag) * (0.5 * t ** 2) - (flag) * c * (0.5 * c - t), -1)
@@ -84,7 +80,7 @@ if __name__ == '__main__':
             [0, -1,  0]];
   kernel = np.asanyarray(kernel);
   A_three = cv2.filter2D(A_partial_horz, -1, kernel);
-  cv2.imwrite("A_three.png", A_partial)
+  cv2.imwrite("A_three.png", A_three)
 
   # Well that was stupid easy.
 
@@ -96,20 +92,14 @@ if __name__ == '__main__':
   min_eigs = A_one - np.sqrt(np.square(A_two) + np.square(A_three));
   diff_eigs = max_eigs - min_eigs;
 
-  # print "Found max and min eigenvalues"
+  print "Found max and min eigenvalues"
 
-  # # Calculate the difference in eigenvalues
-  # diff_eigs_x = max_eigs_x - min_eigs_x;
-  # diff_eigs_y = may_eigs_y - min_eigs_y;
+  # Find J_new
+  huber_max_eigs = huberLoss(max_eigs)
+  huber_min_eigs = huberLoss(min_eigs)
+  huber_diff_eigs = huberLoss(diff_eigs)
 
-  # print "Found eigenvalue differences"
-
-  # # Find J_new
-  # huber_max_eigs = huberLoss(max_eigs_x, max_eigs_y)
-  # huber_min_eigs = huberLoss(min_eigs_x, min_eigs_y)
-  # huber_diff_eigs = huberLoss(diff_eigs_x, diff_eigs_y)
-
-  # print "Found Huber norm of eigen pairs"
+  print "Found Huber norm of eigen pairs"
 
   # J_new = np.sum(.5 * (huber_max_eigs + huber_min_eigs + huber_diff_eigs));
 
