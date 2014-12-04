@@ -4,6 +4,8 @@
 # http://bit.ly/1uMjmsN
 # OpenCV makes it easy to do these kinds of operations:
 # http://bit.ly/1vZAjSU
+# Handy write-up of rderivative-based image operations:
+# http://bit.ly/1AhiZHc
 
 import numpy as np
 import scipy.linalg
@@ -31,9 +33,9 @@ def huberLoss(eigs):
   y_fit = np.ones((eigs.shape))
   t = abs((eigs - y_fit) / dy);
   flag = t > c;
-  # We don't want the sum, just the element-wise norm
-  # np.sum((~flag) * (0.5 * t ** 2) - (flag) * c * (0.5 * c - t), -1)
-  return ((~flag) * (0.5 * t ** 2) - (flag) * c * (0.5 * c - t));
+  # Sum of all huber norms in array
+  return np.sum(np.sum((~flag) * (0.5 * t ** 2)
+                       - (flag) * c * (0.5 * c - t), -1))
 
 
 # Main
@@ -54,32 +56,32 @@ if __name__ == '__main__':
   # A_two: The negative laplacian? Something like that.
   # It's the summation of two convolutions
   # Horizontally
-  kernel = [[0,  0,  0],
-            [1, -2,  1],
-            [0,  0,  0]];
-  kernel = np.asanyarray(kernel);
-  A_horz = cv2.filter2D(blurimg, -1, kernel);
+  horz_double_kernel = [[0,  0,  0],
+                        [1, -2,  1],
+                        [0,  0,  0]];
+  horz_double_kernel = np.asanyarray(horz_double_kernel);
+  A_horz = cv2.filter2D(blurimg, -1, horz_double_kernel);
   # Vertically
-  kernel = [[0,  1,  0],
-            [0, -2,  0],
-            [0,  1,  0]];
-  kernel = np.asanyarray(kernel);
-  A_vert = cv2.filter2D(blurimg, -1, kernel);
+  vert_double_kernel = [[0,  1,  0],
+                        [0, -2,  0],
+                        [0,  1,  0]];
+  vert_double_kernel = np.asanyarray(vert_double_kernel);
+  A_vert = cv2.filter2D(blurimg, -1, vert_double_kernel);
   A_two = A_horz - A_vert;
   cv2.imwrite("A_two.png", A_two)
 
   # A_three: Partial derivatives
   # Convolute in horz, and use that result in convolution of vert
-  kernel = [[0,  0,  0],
-            [1,  0, -1],
-            [0,  0,  0]];
-  kernel = np.asanyarray(kernel);
-  A_partial_horz = cv2.filter2D(blurimg, -1, kernel);
-  kernel = [[0,  1,  0],
-            [0,  0,  0],
-            [0, -1,  0]];
-  kernel = np.asanyarray(kernel);
-  A_three = cv2.filter2D(A_partial_horz, -1, kernel);
+  horz_kernel = [[0,  0,  0],
+                 [1,  0, -1],
+                 [0,  0,  0]];
+  horz_kernel = np.asanyarray(horz_kernel);
+  A_partial_horz = cv2.filter2D(blurimg, -1, horz_kernel);
+  vert_kernel = [[0,  1,  0],
+                 [0,  0,  0],
+                 [0, -1,  0]];
+  vert_kernel = np.asanyarray(vert_kernel);
+  A_three = cv2.filter2D(A_partial_horz, -1, vert_kernel);
   cv2.imwrite("A_three.png", A_three)
 
   # Well that was stupid easy.
@@ -98,45 +100,59 @@ if __name__ == '__main__':
   huber_max_eigs = huberLoss(max_eigs)
   huber_min_eigs = huberLoss(min_eigs)
   huber_diff_eigs = huberLoss(diff_eigs)
+  print huber_max_eigs
+  print huber_min_eigs
+  print huber_diff_eigs
 
   print "Found Huber norm of eigen pairs"
 
-  # J_new = np.sum(.5 * (huber_max_eigs + huber_min_eigs + huber_diff_eigs));
+  J_new = np.sum(.5 * (huber_max_eigs + huber_min_eigs + huber_diff_eigs));
 
-  # print "Found J_new, the reggularization term"
+  print "Found J_new, the regularization term"
 
   # # Find grad_J_new
-  # g_x = np.sqrt( pow(A_one_x, 2) + pow(A_two_x, 2));
-  # g_y = np.sqrt( pow(A_one_y, 2) + pow(A_two_y, 2));
+  # All math here is element-wise
+  g = np.sqrt(np.square(A_one) + np.square(A_two))
+  print "Shape of g: "
+  print g.shape
 
-  # print "Found g"
+  M_one = np.diagflat(np.diagonal(np.divide((1 + np.sign(diff_eigs)), huber_max_eigs)
+                  + np.divide((1 - np.sign(diff_eigs)), huber_max_eigs)))
+  M_two = np.diagflat(np.diagonal(np.divide((1 + np.sign(diff_eigs)), huber_max_eigs)
+                  - np.divide((1 - np.sign(diff_eigs)), huber_max_eigs)))
 
-  # M_one_x = np.diag((1 + np.sign(diff_eigs_x) / huber_max_eigs)
-  #                   + (1 - np.sign(diff_eigs_x) / huber_max_eigs))
-  # M_one_y = np.diag((1 + np.sign(diff_eigs_y) / huber_max_eigs)
-  #                   + (1 - np.sign(diff_eigs_y) / huber_max_eigs))
-  # M_two_x = np.diag((1 + np.sign(diff_eigs_x) / huber_max_eigs)
-  #                   - (1 - np.sign(diff_eigs_x) / huber_max_eigs))
-  # M_two_y = np.diag((1 + np.sign(diff_eigs_y) / huber_max_eigs)
-  #                   - (1 - np.sign(diff_eigs_y) / huber_max_eigs))
+  print "Shape of Mone: "
+  print M_one.shape
+  print "Shape of Mtwo: "
+  print M_two.shape
 
-  # print "Found M1 and M2"
+  print "Found M1 and M2"
 
-  # Theta_x = np.diag( ((np.dot(np.sign(max_eigs_x),
-  #                             (1 + np.sign(diff_eigs_x))) / g_x)
-  #                     - (np.dot(np.sign(min_eigs_x),
-  #                               (1 + np.sign(diff_eigs_x))) / g_x)))
-  # Theta_y = np.diag( ((np.dot(np.sign(max_eigs_y),
-  #                             (1 + np.sign(diff_eigs_y))) / g_y)
-  #                     - (np.dot(np.sign(min_eigs_y),
-  #                               (1 + np.sign(diff_eigs_y))) / g_y)))
+  Theta = np.diagflat(np.diagonal(np.divide(np.sign(max_eigs) * (1 + np.sign(diff_eigs)), g)
+                  - np.divide(np.sign(min_eigs) * (1 + np.sign(diff_eigs)), g)))
+  # Figure this is appropriate
+  Theta = np.nan_to_num(Theta)
 
-  # print "Found Theta"
+  print "Shape of Theta: "
+  print Theta.shape
+
+  y =  np.dot(cv2.Laplacian(M_two, cv2.CV_64F), g)
+  print "Shape of dot: "
+  print y.shape
 
   # # Find grad_J, used in the final optimization
-  # # gradJ = .5[T1' M1 T1 + T2' Theta T2 + T3' Theta T3] f + .5 [T1' M2 g]
+  # gradJ = .5[T1' M1 T1 + T2' Theta T2 + T3' Theta T3] f + .5 [T1' M2 g]
+  grad_J = .5 *
+
+  np.dot((np.dot(np.dot(T_one.transpose(), M_one),
+                              T_one)
+                       + np.dot(np.dot(T_two.transpose(), Theta),
+                                T_two)
+                       + np.dot(np.dot(T_three.transpose(), Theta),
+                                T_three)), f)
+  + .5 * np.dot(cv2.Laplacian(M_two, cv2.CV_64F), g);
   # grad_J_x = .5 * np.dot((np.dot(np.dot(T_one_x.transpose(), M_one_x),
-  #                                T_one_x)
+  #                    n            T_one_x)
   #                         + np.dot(np.dot(T_two_x.transpose(), Theta_x),
   #                                  T_two_x)
   #                         + np.dot(np.dot(T_three_x.transpose(), Theta_x),
