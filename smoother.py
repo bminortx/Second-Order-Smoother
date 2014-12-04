@@ -63,12 +63,13 @@ def huberLoss(eigs):
   y_fit = np.ones((eigs.shape))
   t = abs((eigs - y_fit) / dy);
   flag = t > c;
-  # Sum of all huber norms in array
-  return np.sum(np.sum((~flag) * (0.5 * t ** 2)
-                       - (flag) * c * (0.5 * c - t), -1))
+  return np.sum((~flag) * (0.5 * t ** 2)
+                - (flag) * c * (0.5 * c - t), -1)
 
 
-# Main
+##################################
+# MAIN FUNCTION
+#################
 if __name__ == '__main__':
   fn = cv2.imread('./tree.jpg', 0)
   blurimg = blurImage(fn)
@@ -77,8 +78,6 @@ if __name__ == '__main__':
   #################
   # CALCULATE DERIVATIVES
   #################
-  # Our tensors for second-order operations
-  # First column is x operations, second is y.
   # A_one: The laplacian
   # http://bit.ly/12je4JY
   A_one = cv2.Laplacian(blurimg, cv2.CV_64F)
@@ -108,9 +107,9 @@ if __name__ == '__main__':
   huber_max_eigs = huberLoss(max_eigs)
   huber_min_eigs = huberLoss(min_eigs)
   huber_diff_eigs = huberLoss(diff_eigs)
-  print huber_max_eigs
-  print huber_min_eigs
-  print huber_diff_eigs
+  print huber_max_eigs.shape
+  print huber_min_eigs.shape
+  print huber_diff_eigs.shape
 
   print "Found Huber norm of eigen pairs"
 
@@ -147,18 +146,22 @@ if __name__ == '__main__':
   print "Shape of Theta: "
   print Theta.shape
 
-  y =  np.dot(cv2.Laplacian(M_two, cv2.CV_64F), g)
-  print "Shape of dot: "
-  print y.shape
-
   # # Find grad_J, used in the final optimization
   # gradJ = .5[T1' M1 T1 + T2' Theta T2 + T3' Theta T3] f + .5 [T1' M2 g]
   T1M1T1 = cv2.Laplacian(cv2.Laplacian(M_one, cv2.CV_64F), cv2.CV_64F);
+  print "T1M1T1.shape"
+  print T1M1T1.shape
   T2ThetaT2 = negLaplacian(negLaplacian(Theta));
+  print "T2ThetaT2.shape"
+  print T2ThetaT2.shape
   T3ThetaT3 = partialDer(partialDer(Theta));
+  print "T3ThetaT3.shape"
+  print T3ThetaT3.shape
   T1M2g = cv2.Laplacian(np.dot(M_two, g), cv2.CV_64F)
-  gradJ = (.5 * np.dot(T1M1T1 + T2ThetaT2 + T3ThetaT3, f) +
-           .5 * T1M2g)
+  print "T1M2g.shape"
+  print T1M2g.shape
+  gradJ = (np.dot(T1M1T1 + T2ThetaT2 + T3ThetaT3, f) +
+           T1M2g);
   print "GradJ shape: "
   print gradJ.shape
 
