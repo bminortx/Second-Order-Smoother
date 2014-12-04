@@ -25,6 +25,36 @@ def blurImage(fn):
   cv2.imwrite("./rectimg.jpg", blurimg)
   return blurimg
 
+
+def negLaplacian(src):
+  # Horizontally
+  horz_double_kernel = [[0,  0,  0],
+                        [1, -2,  1],
+                        [0,  0,  0]];
+  horz_double_kernel = np.asanyarray(horz_double_kernel);
+  A_horz = cv2.filter2D(blurimg, -1, horz_double_kernel);
+  # Vertically
+  vert_double_kernel = [[0,  1,  0],
+                        [0, -2,  0],
+                        [0,  1,  0]];
+  vert_double_kernel = np.asanyarray(vert_double_kernel);
+  A_vert = cv2.filter2D(blurimg, -1, vert_double_kernel);
+  return A_horz - A_vert;
+
+
+def partialDer(src):
+  # Convolute in horz, and use that result in convolution of vert
+  horz_kernel = [[0,  0,  0],
+                 [1,  0, -1],
+                 [0,  0,  0]];
+  horz_kernel = np.asanyarray(horz_kernel);
+  A_partial_horz = cv2.filter2D(blurimg, -1, horz_kernel);
+  vert_kernel = [[0,  1,  0],
+                 [0,  0,  0],
+                 [0, -1,  0]];
+  vert_kernel = np.asanyarray(vert_kernel);
+  return cv2.filter2D(A_partial_horz, -1, vert_kernel);
+
 # Elegantly programmed norm from http://bit.ly/1xuPoqn
 # Do this element-wise through the full image
 def huberLoss(eigs):
@@ -54,34 +84,12 @@ if __name__ == '__main__':
   A_one = cv2.Laplacian(blurimg, cv2.CV_64F)
 
   # A_two: The negative laplacian? Something like that.
-  # It's the summation of two convolutions
-  # Horizontally
-  horz_double_kernel = [[0,  0,  0],
-                        [1, -2,  1],
-                        [0,  0,  0]];
-  horz_double_kernel = np.asanyarray(horz_double_kernel);
-  A_horz = cv2.filter2D(blurimg, -1, horz_double_kernel);
-  # Vertically
-  vert_double_kernel = [[0,  1,  0],
-                        [0, -2,  0],
-                        [0,  1,  0]];
-  vert_double_kernel = np.asanyarray(vert_double_kernel);
-  A_vert = cv2.filter2D(blurimg, -1, vert_double_kernel);
-  A_two = A_horz - A_vert;
+  # It's the difference of two convolutions
+  A_two = negLaplacian(blurimg);
   cv2.imwrite("A_two.png", A_two)
 
   # A_three: Partial derivatives
-  # Convolute in horz, and use that result in convolution of vert
-  horz_kernel = [[0,  0,  0],
-                 [1,  0, -1],
-                 [0,  0,  0]];
-  horz_kernel = np.asanyarray(horz_kernel);
-  A_partial_horz = cv2.filter2D(blurimg, -1, horz_kernel);
-  vert_kernel = [[0,  1,  0],
-                 [0,  0,  0],
-                 [0, -1,  0]];
-  vert_kernel = np.asanyarray(vert_kernel);
-  A_three = cv2.filter2D(A_partial_horz, -1, vert_kernel);
+  A_three = partialDer(blurimg);
   cv2.imwrite("A_three.png", A_three)
 
   # Well that was stupid easy.
@@ -116,10 +124,12 @@ if __name__ == '__main__':
   print "Shape of g: "
   print g.shape
 
-  M_one = np.diagflat(np.diagonal(np.divide((1 + np.sign(diff_eigs)), huber_max_eigs)
-                  + np.divide((1 - np.sign(diff_eigs)), huber_max_eigs)))
-  M_two = np.diagflat(np.diagonal(np.divide((1 + np.sign(diff_eigs)), huber_max_eigs)
-                  - np.divide((1 - np.sign(diff_eigs)), huber_max_eigs)))
+  M_one = np.diagflat(
+    np.diagonal(np.divide((1 + np.sign(diff_eigs)), huber_max_eigs)
+                + np.divide((1 - np.sign(diff_eigs)), huber_max_eigs)))
+  M_two = np.diagflat(
+    np.diagonal(np.divide((1 + np.sign(diff_eigs)), huber_max_eigs)
+                - np.divide((1 - np.sign(diff_eigs)), huber_max_eigs)))
 
   print "Shape of Mone: "
   print M_one.shape
@@ -128,8 +138,9 @@ if __name__ == '__main__':
 
   print "Found M1 and M2"
 
-  Theta = np.diagflat(np.diagonal(np.divide(np.sign(max_eigs) * (1 + np.sign(diff_eigs)), g)
-                  - np.divide(np.sign(min_eigs) * (1 + np.sign(diff_eigs)), g)))
+  Theta = np.diagflat(
+    np.diagonal(np.divide(np.sign(max_eigs) * (1 + np.sign(diff_eigs)), g)
+                - np.divide(np.sign(min_eigs) * (1 + np.sign(diff_eigs)), g)))
   # Figure this is appropriate
   Theta = np.nan_to_num(Theta)
 
@@ -142,31 +153,14 @@ if __name__ == '__main__':
 
   # # Find grad_J, used in the final optimization
   # gradJ = .5[T1' M1 T1 + T2' Theta T2 + T3' Theta T3] f + .5 [T1' M2 g]
-  grad_J = .5 *
-
-  np.dot((np.dot(np.dot(T_one.transpose(), M_one),
-                              T_one)
-                       + np.dot(np.dot(T_two.transpose(), Theta),
-                                T_two)
-                       + np.dot(np.dot(T_three.transpose(), Theta),
-                                T_three)), f)
-  + .5 * np.dot(cv2.Laplacian(M_two, cv2.CV_64F), g);
-  # grad_J_x = .5 * np.dot((np.dot(np.dot(T_one_x.transpose(), M_one_x),
-  #                    n            T_one_x)
-  #                         + np.dot(np.dot(T_two_x.transpose(), Theta_x),
-  #                                  T_two_x)
-  #                         + np.dot(np.dot(T_three_x.transpose(), Theta_x),
-  #                                  T_three_x)),
-  #                        f) + .5 * np.dot(np.dot(T_one_x.transpose(),
-  #                                                M_one_x), g_x);
-  # grad_J_y = .5 * np.dot((np.dot(np.dot(T_one_y.transpose(), M_one_y),
-  #                                T_one_y)
-  #                         + np.dot(np.dot(T_two_y.transpose(), Theta_y),
-  #                                  T_two_y)
-  #                         + np.dot(np.dot(T_three_y.transpose(), Theta_y),
-  #                                  T_three_y)),
-  #                        f) + .5 * np.dot(np.dot(T_one_y.transpose(),
-  #                                                M_one_y), g_y);
+  T1M1T1 = cv2.Laplacian(cv2.Laplacian(M_one, cv2.CV_64F), cv2.CV_64F);
+  T2ThetaT2 = negLaplacian(negLaplacian(Theta));
+  T3ThetaT3 = partialDer(partialDer(Theta));
+  T1M2g = cv2.Laplacian(np.dot(M_two, g), cv2.CV_64F)
+  gradJ = (.5 * np.dot(T1M1T1 + T2ThetaT2 + T3ThetaT3, f) +
+           .5 * T1M2g)
+  print "GradJ shape: "
+  print gradJ.shape
 
   # print "Found the gradient!"
 
