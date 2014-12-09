@@ -144,18 +144,18 @@ if __name__ == '__main__':
   #################
   # CALCULATE DERIVATIVES
   #################
-  # A_one: The laplacian
+  # AOne: The laplacian
   # http://bit.ly/12je4JY
-  A_one = laplacian(blurimg);
+  AOne = laplacian(blurimg);
 
-  # A_two: The negative laplacian? Something like that.
+  # ATwo: The negative laplacian? Something like that.
   # It's the difference of two convolutions
-  A_two = negLaplacian(blurimg);
-  cv2.imwrite("A_two.png", A_two)
+  ATwo = negLaplacian(blurimg);
+  cv2.imwrite("ATwo.png", ATwo)
 
-  # A_three: Partial derivatives
-  A_three = partialDer(blurimg);
-  cv2.imwrite("A_three.png", A_three)
+  # AThree: Partial derivatives
+  AThree = partialDer(blurimg);
+  cv2.imwrite("AThree.png", AThree)
 
   # Well that was stupid easy.
 
@@ -163,52 +163,47 @@ if __name__ == '__main__':
   # CALCULATE EIGENVALUES
   #################
 
-  max_eigs = A_one + np.sqrt(np.square(A_two) + np.square(A_three));
-  min_eigs = A_one - np.sqrt(np.square(A_two) + np.square(A_three));
-  diff_eigs = max_eigs - min_eigs;
+  eigsMax = AOne + np.sqrt(np.square(ATwo) + np.square(AThree));
+  eigsMin = AOne - np.sqrt(np.square(ATwo) + np.square(AThree));
+  eigsDiff = eigsMax - eigsMin;
   print "Found max and min eigenvalues"
 
-  # Find J_new
-  huber_max_eigs = huberLoss(max_eigs)
-  huber_min_eigs = huberLoss(min_eigs)
-  huber_diff_eigs = huberLoss(diff_eigs)
+  # Find JReg
+  huberMax = huberLoss(eigsMax);
+  huberMin = huberLoss(eigsMin);
+  huberDiff = huberLoss(eigsDiff);
   print "Found Huber norm of eigen pairs"
 
-  J_new = np.sum(np.sum(.5 * (huber_max_eigs
-                              + huber_min_eigs
-                              + huber_diff_eigs)));
-  print "Found J_new, the regularization term. It's value is"
-  print J_new
+  JReg = np.sum(np.sum(.5 *
+                       (huberMax + huberMin + huberDiff)));
+  print "Found JReg, the regularization term. It's value is"
+  print JReg
 
-  # # Find grad_J_new
+  # # Find grad_JReg
   # All math here is element-wise
-  g = np.sqrt(np.square(A_one) + np.square(A_two))
+  g = np.sqrt(np.square(AOne) + np.square(ATwo));
   print "Shape of g: "
   print g.shape
 
-  M_one = (np.true_divide((1 + np.sign(diff_eigs)), huber_max_eigs)
-           + np.true_divide((1 - np.sign(diff_eigs)), huber_max_eigs));
-  M_two = (np.true_divide((1 + np.sign(diff_eigs)), huber_max_eigs)
-           - np.true_divide((1 - np.sign(diff_eigs)), huber_max_eigs));
+  MOne = (np.true_divide((1 + np.sign(eigsDiff)), huberMax)
+           + np.true_divide((1 - np.sign(eigsDiff)), huberMax));
+  MOne = np.nan_to_num(MOne);
+  MTwo = (np.true_divide((1 + np.sign(eigsDiff)), huberMax)
+           - np.true_divide((1 - np.sign(eigsDiff)), huberMax));
+  MTwo = np.nan_to_num(MTwo);
   print "Found M1 and M2"
 
-  Theta = (np.true_divide(np.sign(max_eigs) * (1 + np.sign(diff_eigs)), g)
-           - np.true_divide(np.sign(min_eigs) * (1 + np.sign(diff_eigs)), g));
+  Theta = (np.true_divide(np.sign(eigsMax) * (1 + np.sign(eigsDiff)), g)
+           - np.true_divide(np.sign(eigsMin) * (1 + np.sign(eigsDiff)), g));
   # Figure this is appropriate
-  Theta = np.nan_to_num(Theta)
-  print "Shape of Theta: "
+  Theta = np.nan_to_num(Theta);
+  print "Found Theta. Shape:"
   print Theta.shape
 
-  # # Find grad_J, used in the final optimization
-
-  (fOutput, gOutput) = calcGradJ(blurimg, rows, cols, M1, M2, Theta, g);
-
-
-  # print "Found the gradient!"
-
-  # # Perform the optimization
-  # print grad_J_x.shape[0]
-  # print grad_J_y.shape[0]
+  # # Find gradJReg, used in the final optimization. Just elementwise addition.
+  (fOutput, gOutput) = calcGradJ(blurimg, rows, cols, MOne, MTwo, Theta, g);
+  gradJReg = fOutput + gOutput;
+  print "Found the gradient for the regularizer!"
 
   ###################
   # /Optimization iteration here
