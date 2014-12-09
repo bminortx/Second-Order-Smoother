@@ -23,7 +23,7 @@ def blurImage(fn):
   cv2.imwrite("./blurimg.jpg", blurimg)
   # Just a placeholder
   cv2.imwrite("./rectimg.jpg", blurimg)
-  return blurimg
+  return blurimg;
 
 
 def laplacian(src):
@@ -31,24 +31,18 @@ def laplacian(src):
                       [1, -4,  1],
                       [0,  1,  0]];
   laplacian_kernel = np.asanyarray(laplacian_kernel);
-  A_laplacian = cv2.filter2D(blurimg, -1, laplacian_kernel);
+  A_laplacian = cv2.filter2D(src, -1, laplacian_kernel);
   return A_laplacian;
 
 
 def negLaplacian(src):
-  # Horizontally
-  horz_double_kernel = [[0,  0,  0],
-                        [1, -2,  1],
-                        [0,  0,  0]];
-  horz_double_kernel = np.asanyarray(horz_double_kernel);
-  A_horz = cv2.filter2D(blurimg, -1, horz_double_kernel);
-  # Vertically
-  vert_double_kernel = [[0,  1,  0],
-                        [0, -2,  0],
-                        [0,  1,  0]];
-  vert_double_kernel = np.asanyarray(vert_double_kernel);
-  A_vert = cv2.filter2D(blurimg, -1, vert_double_kernel);
-  return A_horz - A_vert;
+  # Combine both kernels to get this
+  double_kernel = [[0, -1,  0],
+                   [1,  0,  1],
+                   [0, -1,  0]];
+  double_kernel = np.asanyarray(double_kernel);
+  ANegLap = cv2.filter2D(src, -1, double_kernel);
+  return ANegLap;
 
 
 def partialDer(src):
@@ -57,11 +51,14 @@ def partialDer(src):
                  [1,  0, -1],
                  [0,  0,  0]];
   horz_kernel = np.asanyarray(horz_kernel);
-  A_partial_horz = cv2.filter2D(blurimg, -1, horz_kernel);
+  A_partial_horz = cv2.filter2D(src, -1, horz_kernel);
   vert_kernel = [[0,  1,  0],
                  [0,  0,  0],
                  [0, -1,  0]];
   vert_kernel = np.asanyarray(vert_kernel);
+  third_kernel = [[0,  1,  0],
+                  [1,  0, -1],
+                  [0, -1,  0]];
   return cv2.filter2D(A_partial_horz, -1, vert_kernel);
 
 
@@ -77,7 +74,7 @@ def huberLoss(eigs):
 
 
 # http://bit.ly/1sewX7O
-def calcGradJ(src, rows, cols, M1, M2, Theta, g):
+def calcGradJ(src, rows, cols, MOne, MTwo, Theta, g):
   ##############
   # 1. Compute kernel on f
   for j in range(1, rows - 1):
@@ -86,16 +83,21 @@ def calcGradJ(src, rows, cols, M1, M2, Theta, g):
     current = src[j, :];
     next = src[j + 1, :];
     fOutput = np.zeros((rows, cols));
+    laplacian_kernel = np.array([[0,  1,  0],
+                                 [1, -4,  1],
+                                 [0,  1,  0]]);
+    double_kernel = [[0, -1,  0],
+                     [1,  0,  1],
+                     [0, -1,  0]];
     for i in range(1, cols - 1):
-
-
-      
       # TODO: Place custom kernel here
-      fOutput[j, i] = (5 * current[i] - current[i - 1]
-                      - current[i + 1] - previous[i] - next[i]);
-
-
-      
+      kernelTOne = np.dot(laplacian_kernel.T,
+                          np.dot(MOne[j, i], laplacian_kernel));
+      kernelTOne = np.dot(laplacian_kernel.T,
+                          np.dot(MOne[j, i], laplacian_kernel));
+      # Endpoint is weird for numpy
+      superpixel = src[j - 1 : j + 2, i - 1 : i + 2];
+      fOutput[j, i] = np.sum(np.dot(kernelTOne, superpixel));
 
   # Zero out the other rows
   fOutput[0, :] = np.zeros((1, cols));
@@ -112,15 +114,9 @@ def calcGradJ(src, rows, cols, M1, M2, Theta, g):
     next = src[j + 1, :];
     gOutput = np.zeros((rows, cols));
     for i in range(1, cols - 1):
-
-
-      
     # TODO: Place custom kernel here
       gOutput[j, i] = (5 * current[i] - current[i - 1]
                       - current[i + 1] - previous[i] - next[i]);
-
-
-      
 
   # Zero out the other rows
   gOutput[0, :] = np.zeros((1, cols));
@@ -174,8 +170,8 @@ if __name__ == '__main__':
   huberDiff = huberLoss(eigsDiff);
   print "Found Huber norm of eigen pairs"
 
-  JReg = np.sum(np.sum(.5 *
-                       (huberMax + huberMin + huberDiff)));
+  JReg = np.sum(.5 *
+                (huberMax + huberMin + huberDiff));
   print "Found JReg, the regularization term. It's value is"
   print JReg
 
