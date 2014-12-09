@@ -47,19 +47,11 @@ def negLaplacian(src):
 
 def partialDer(src):
   # Convolute in horz, and use that result in convolution of vert
-  horz_kernel = [[0,  0,  0],
-                 [1,  0, -1],
-                 [0,  0,  0]];
-  horz_kernel = np.asanyarray(horz_kernel);
-  A_partial_horz = cv2.filter2D(src, -1, horz_kernel);
-  vert_kernel = [[0,  1,  0],
-                 [0,  0,  0],
-                 [0, -1,  0]];
+  third_kernel = [[ 1, 0, -1],
+                  [ 0, 0,  0],
+                  [-1, 0, 1]];
   vert_kernel = np.asanyarray(vert_kernel);
-  third_kernel = [[0,  1,  0],
-                  [1,  0, -1],
-                  [0, -1,  0]];
-  return cv2.filter2D(A_partial_horz, -1, vert_kernel);
+  return cv2.filter2D(src, -1, vert_kernel);
 
 
 # Do this element-wise through the full image
@@ -75,6 +67,15 @@ def huberLoss(eigs):
 
 # http://bit.ly/1sewX7O
 def calcGradJ(src, rows, cols, MOne, MTwo, Theta, g):
+  laplacianKernel = np.array([[0,  1,  0],
+                              [1, -4,  1],
+                              [0,  1,  0]]);
+  doubleKernel = np.array([[0, -1,  0],
+                           [1,  0,  1],
+                           [0, -1,  0]]);
+  partialkernel = np.array([[ 1, 0, -1],
+                            [ 0, 0,  0],
+                            [-1, 0, 1]]);
   ##############
   # 1. Compute kernel on f
   for j in range(1, rows - 1):
@@ -83,18 +84,14 @@ def calcGradJ(src, rows, cols, MOne, MTwo, Theta, g):
     current = src[j, :];
     next = src[j + 1, :];
     fOutput = np.zeros((rows, cols));
-    laplacian_kernel = np.array([[0,  1,  0],
-                                 [1, -4,  1],
-                                 [0,  1,  0]]);
-    double_kernel = [[0, -1,  0],
-                     [1,  0,  1],
-                     [0, -1,  0]];
     for i in range(1, cols - 1):
-      # TODO: Place custom kernel here
-      kernelTOne = np.dot(laplacian_kernel.T,
-                          np.dot(MOne[j, i], laplacian_kernel));
-      kernelTOne = np.dot(laplacian_kernel.T,
-                          np.dot(MOne[j, i], laplacian_kernel));
+      kernelTOne = np.dot(laplacianKernel.T,
+                          np.dot(MOne[j, i], laplacianKernel));
+      kernelTTwo = np.dot(doubleKernel.T,
+                          np.dot(Theta[j, i], doubleKernel));
+      kernelTThree = np.dot(partialkernel.T,
+                            np.dot(Theta[j, i], partialKernel));
+      kernelCombined = kernelTOne + kernelTTwo + kernelTThree;
       # Endpoint is weird for numpy
       superpixel = src[j - 1 : j + 2, i - 1 : i + 2];
       fOutput[j, i] = np.sum(np.dot(kernelTOne, superpixel));

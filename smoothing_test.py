@@ -45,10 +45,9 @@ def partialDerTest(src):
                    [0, -1,  0]];
     vert_kernel = np.asanyarray(vert_kernel);
     A_final = cv2.filter2D(A_partial_horz, -1, vert_kernel);
-    # These are not the same, though :(
-    third_kernel = [[0,  1,  0],
-                    [1,  0, -1],
-                    [0, -1,  0]];
+    third_kernel = [[ 1, 0, -1],
+                    [ 0, 0,  0],
+                    [-1, 0, 1]];
     third_kernel = np.asanyarray(third_kernel);
     A_diff = cv2.filter2D(src, -1, third_kernel);
     return np.linalg.norm(A_diff - A_final);
