@@ -64,7 +64,7 @@ def partialDer(src):
   vert_kernel = np.asanyarray(vert_kernel);
   return cv2.filter2D(A_partial_horz, -1, vert_kernel);
 
-# Elegantly programmed norm from http://bit.ly/1xuPoqn
+
 # Do this element-wise through the full image
 # http://bit.ly/163n9ci
 def huberLoss(eigs):
@@ -72,7 +72,7 @@ def huberLoss(eigs):
   alpha = 1;
   flag = eigs > alpha;
   huberMask = np.greater(np.abs(eigs), alpha);
-  return (~huberMask * (0.5 * eigs ** 2)
+  return (~huberMask * (0.5 * np.square(eigs))
           - huberMask * (alpha * (0.5 * alpha - abs(eigs))));
 
 
@@ -166,21 +166,17 @@ if __name__ == '__main__':
   max_eigs = A_one + np.sqrt(np.square(A_two) + np.square(A_three));
   min_eigs = A_one - np.sqrt(np.square(A_two) + np.square(A_three));
   diff_eigs = max_eigs - min_eigs;
-
   print "Found max and min eigenvalues"
 
   # Find J_new
   huber_max_eigs = huberLoss(max_eigs)
   huber_min_eigs = huberLoss(min_eigs)
   huber_diff_eigs = huberLoss(diff_eigs)
-  print huber_max_eigs.shape
-  print huber_min_eigs.shape
-  print huber_diff_eigs.shape
-
   print "Found Huber norm of eigen pairs"
 
-  J_new = np.sum(.5 * (huber_max_eigs + huber_min_eigs + huber_diff_eigs));
-
+  J_new = np.sum(np.sum(.5 * (huber_max_eigs
+                              + huber_min_eigs
+                              + huber_diff_eigs)));
   print "Found J_new, the regularization term. It's value is"
   print J_new
 
@@ -190,21 +186,16 @@ if __name__ == '__main__':
   print "Shape of g: "
   print g.shape
 
-  M_one = np.diagflat(
-    np.diagonal(np.divide((1 + np.sign(diff_eigs)), huber_max_eigs)
-                + np.divide((1 - np.sign(diff_eigs)), huber_max_eigs)))
-  M_two = np.diagflat(
-    np.diagonal(np.divide((1 + np.sign(diff_eigs)), huber_max_eigs)
-                - np.divide((1 - np.sign(diff_eigs)), huber_max_eigs)))
-
+  M_one = (np.true_divide((1 + np.sign(diff_eigs)), huber_max_eigs)
+           + np.true_divide((1 - np.sign(diff_eigs)), huber_max_eigs));
+  M_two = (np.true_divide((1 + np.sign(diff_eigs)), huber_max_eigs)
+           - np.true_divide((1 - np.sign(diff_eigs)), huber_max_eigs));
   print "Found M1 and M2"
 
-  Theta = np.diagflat(
-    np.diagonal(np.divide(np.sign(max_eigs) * (1 + np.sign(diff_eigs)), g)
-                - np.divide(np.sign(min_eigs) * (1 + np.sign(diff_eigs)), g)))
+  Theta = (np.true_divide(np.sign(max_eigs) * (1 + np.sign(diff_eigs)), g)
+           - np.true_divide(np.sign(min_eigs) * (1 + np.sign(diff_eigs)), g));
   # Figure this is appropriate
   Theta = np.nan_to_num(Theta)
-
   print "Shape of Theta: "
   print Theta.shape
 
