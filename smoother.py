@@ -77,30 +77,59 @@ def huberLoss(eigs):
 
 
 # http://bit.ly/1sewX7O
-def bigKernel(src, rows, cols):
+def calcGradJ(src, rows, cols, M1, M2, Theta, g):
+  ##############
+  # 1. Compute kernel on f
   for j in range(1, rows - 1):
     # Access the following rows
     previous = src[j - 1, :];
     current = src[j, :];
     next = src[j + 1, :];
-    output = np.zeros((rows, cols));
+    fOutput = np.zeros((rows, cols));
     for i in range(1, cols - 1):
 
 
       
       # TODO: Place custom kernel here
-      output[j, i] = (5 * current[i] - current[i - 1]
+      fOutput[j, i] = (5 * current[i] - current[i - 1]
                       - current[i + 1] - previous[i] - next[i]);
 
 
       
 
   # Zero out the other rows
-  output[0, :] = np.zeros((1, cols));
-  output[rows - 1, :] = np.zeros((1, cols));
-  output[:, 0] = np.zeros((rows));
-  output[:, cols - 1] = np.zeros((rows));
-  return output;
+  fOutput[0, :] = np.zeros((1, cols));
+  fOutput[rows - 1, :] = np.zeros((1, cols));
+  fOutput[:, 0] = np.zeros((rows));
+  fOutput[:, cols - 1] = np.zeros((rows));
+
+  ##############
+  # 2. Compute kernel on g
+  for j in range(1, rows - 1):
+    # Access the following rows
+    previous = src[j - 1, :];
+    current = src[j, :];
+    next = src[j + 1, :];
+    gOutput = np.zeros((rows, cols));
+    for i in range(1, cols - 1):
+
+
+      
+    # TODO: Place custom kernel here
+      gOutput[j, i] = (5 * current[i] - current[i - 1]
+                      - current[i + 1] - previous[i] - next[i]);
+
+
+      
+
+  # Zero out the other rows
+  gOutput[0, :] = np.zeros((1, cols));
+  gOutput[rows - 1, :] = np.zeros((1, cols));
+  gOutput[:, 0] = np.zeros((rows));
+  gOutput[:, cols - 1] = np.zeros((rows));
+
+  
+  return (fOutput, gOutput);
 
 
 
@@ -111,9 +140,6 @@ if __name__ == '__main__':
   fn = cv2.imread('./tree.jpg', 0)
   blurimg = blurImage(fn)
   rows, cols = blurimg.shape
-  output = bigKernel(blurimg, rows, cols);
-  print output.shape;
-  
 
   #################
   # CALCULATE DERIVATIVES
@@ -183,23 +209,9 @@ if __name__ == '__main__':
   print Theta.shape
 
   # # Find grad_J, used in the final optimization
-  # gradJ = .5[T1' M1 T1 + T2' Theta T2 + T3' Theta T3] f + .5 [T1' M2 g]
-  T1M1T1 = cv2.Laplacian(cv2.Laplacian(M_one, cv2.CV_64F), cv2.CV_64F);
-  print "T1M1T1.shape"
-  print T1M1T1.shape
-  T2ThetaT2 = negLaplacian(negLaplacian(Theta));
-  print "T2ThetaT2.shape"
-  print T2ThetaT2.shape
-  T3ThetaT3 = partialDer(partialDer(Theta));
-  print "T3ThetaT3.shape"
-  print T3ThetaT3.shape
-  T1M2g = cv2.Laplacian(np.dot(M_two, g), cv2.CV_64F)
-  print "T1M2g.shape"
-  print T1M2g.shape
-  gradJ = (np.dot(T1M1T1 + T2ThetaT2 + T3ThetaT3, f) +
-           T1M2g);
-  print "GradJ shape: "
-  print gradJ.shape
+
+  (fOutput, gOutput) = calcGradJ(blurimg, rows, cols, M1, M2, Theta, g);
+
 
   # print "Found the gradient!"
 
