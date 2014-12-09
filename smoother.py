@@ -26,6 +26,15 @@ def blurImage(fn):
   return blurimg
 
 
+def laplacian(src):
+  laplacian_kernel = [[0,  1,  0],
+                      [1, -4,  1],
+                      [0,  1,  0]];
+  laplacian_kernel = np.asanyarray(laplacian_kernel);
+  A_laplacian = cv2.filter2D(blurimg, -1, laplacian_kernel);
+  return A_laplacian;
+
+
 def negLaplacian(src):
   # Horizontally
   horz_double_kernel = [[0,  0,  0],
@@ -64,23 +73,54 @@ def huberLoss(eigs):
   t = abs((eigs - y_fit) / dy);
   flag = t > c;
   return np.sum((~flag) * (0.5 * t ** 2)
-                - (flag) * c * (0.5 * c - t), -1)
+                - (flag) * c * (0.5 * c - t), -1);
+
+
+# http://bit.ly/1sewX7O
+def bigKernel(src, rows, cols):
+  for j in range(1, rows - 1):
+    # Access the following rows
+    previous = src[j - 1, :];
+    current = src[j, :];
+    next = src[j + 1, :];
+    output = np.zeros((rows, cols));
+    for i in range(1, cols - 1):
+
+
+      
+      # TODO: Place custom kernel here
+      output[j, i] = (5 * current[i] - current[i - 1]
+                      - current[i + 1] - previous[i] - next[i]);
+
+
+      
+
+  # Zero out the other rows
+  output[0, :] = np.zeros((1, cols));
+  output[rows - 1, :] = np.zeros((1, cols));
+  output[:, 0] = np.zeros((rows));
+  output[:, cols - 1] = np.zeros((rows));
+  return output;
+
 
 
 ##################################
 # MAIN FUNCTION
-#################
+##################################
 if __name__ == '__main__':
   fn = cv2.imread('./tree.jpg', 0)
   blurimg = blurImage(fn)
   rows, cols = blurimg.shape
+  output = bigKernel(blurimg, rows, cols);
+  print output.shape;
+  
 
   #################
   # CALCULATE DERIVATIVES
   #################
   # A_one: The laplacian
   # http://bit.ly/12je4JY
-  A_one = cv2.Laplacian(blurimg, cv2.CV_64F)
+  A_one = laplacian(blurimg);
 
   # A_two: The negative laplacian? Something like that.
   # It's the difference of two convolutions
@@ -115,7 +155,8 @@ if __name__ == '__main__':
 
   J_new = np.sum(.5 * (huber_max_eigs + huber_min_eigs + huber_diff_eigs));
 
-  print "Found J_new, the regularization term"
+  print "Found J_new, the regularization term. It's value is"
+  print J_new
 
   # # Find grad_J_new
   # All math here is element-wise
@@ -129,11 +170,6 @@ if __name__ == '__main__':
   M_two = np.diagflat(
     np.diagonal(np.divide((1 + np.sign(diff_eigs)), huber_max_eigs)
                 - np.divide((1 - np.sign(diff_eigs)), huber_max_eigs)))
-
-  print "Shape of Mone: "
-  print M_one.shape
-  print "Shape of Mtwo: "
-  print M_two.shape
 
   print "Found M1 and M2"
 
