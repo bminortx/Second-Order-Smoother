@@ -34,7 +34,7 @@ def negLaplacianTest(src):
 
 
 def partialDerTest(src):
-    # Convolute in horz, and use that result in convolution of vert
+    # http://www.cs.uu.nl/docs/vakken/ibv/reader/chapter5.pdf
     horz_kernel = [[0,  0,  0],
                    [1,  0, -1],
                    [0,  0,  0]];

@@ -46,12 +46,12 @@ def negLaplacian(src):
 
 
 def partialDer(src):
-  # Convolute in horz, and use that result in convolution of vert
-  third_kernel = [[ 1, 0, -1],
-                  [ 0, 0,  0],
-                  [-1, 0, 1]];
-  vert_kernel = np.asanyarray(vert_kernel);
-  return cv2.filter2D(src, -1, vert_kernel);
+  # http://www.cs.uu.nl/docs/vakken/ibv/reader/chapter5.pdf
+  partial_kernel = [[ 1, 0, -1],
+                    [ 0, 0,  0],
+                    [-1, 0,  1]];
+  partial_kernel = np.asanyarray(partial_kernel);
+  return cv2.filter2D(src, -1, partial_kernel);
 
 
 # Do this element-wise through the full image
@@ -75,7 +75,9 @@ def calcGradJ(src, rows, cols, MOne, MTwo, Theta, g):
                            [0, -1,  0]]);
   partialkernel = np.array([[ 1, 0, -1],
                             [ 0, 0,  0],
-                            [-1, 0, 1]]);
+                            [-1, 0,  1]]);
+  fOutput = np.zeros((rows, cols));
+  gOutput = np.zeros((rows, cols));
   ##############
   # 1. Compute kernel on f
   for j in range(1, rows - 1):
@@ -83,7 +85,6 @@ def calcGradJ(src, rows, cols, MOne, MTwo, Theta, g):
     previous = src[j - 1, :];
     current = src[j, :];
     next = src[j + 1, :];
-    fOutput = np.zeros((rows, cols));
     for i in range(1, cols - 1):
       kernelTOne = np.dot(laplacianKernel.T,
                           np.dot(MOne[j, i], laplacianKernel));
@@ -109,7 +110,6 @@ def calcGradJ(src, rows, cols, MOne, MTwo, Theta, g):
     previous = src[j - 1, :];
     current = src[j, :];
     next = src[j + 1, :];
-    gOutput = np.zeros((rows, cols));
     for i in range(1, cols - 1):
     # TODO: Place custom kernel here
       gOutput[j, i] = (5 * current[i] - current[i - 1]
@@ -121,7 +121,6 @@ def calcGradJ(src, rows, cols, MOne, MTwo, Theta, g):
   gOutput[:, 0] = np.zeros((rows));
   gOutput[:, cols - 1] = np.zeros((rows));
 
-  
   return (fOutput, gOutput);
 
 
