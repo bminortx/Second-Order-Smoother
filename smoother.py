@@ -66,14 +66,14 @@ def partialDer(src):
 
 # Elegantly programmed norm from http://bit.ly/1xuPoqn
 # Do this element-wise through the full image
+# http://bit.ly/163n9ci
 def huberLoss(eigs):
-  c = 2;
-  dy = 1;
-  y_fit = np.ones((eigs.shape))
-  t = abs((eigs - y_fit) / dy);
-  flag = t > c;
-  return np.sum((~flag) * (0.5 * t ** 2)
-                - (flag) * c * (0.5 * c - t), -1);
+  # One may not be the best alpha term, but we'll start here.
+  alpha = 1;
+  flag = eigs > alpha;
+  huberMask = np.greater(np.abs(eigs), alpha);
+  return (~huberMask * (0.5 * eigs ** 2)
+          - huberMask * (alpha * (0.5 * alpha - abs(eigs))));
 
 
 # http://bit.ly/1sewX7O
