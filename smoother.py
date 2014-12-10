@@ -15,16 +15,19 @@ import cv2
 import time
 
 
+def costFunc(y, f, tau, JReg):
+  imageCost = y - blurImage(f);
+  # print .5 * np.sum(imageCost * imageCost) + tau * JReg;
+  return .5 * np.square(np.linalg.norm(imageCost)) + tau * JReg;
+
+
 # Apply some gaussian blur to this biznitch
-def blurImage(fn):
-  ksize = (9, 9)
-  sigma_x = 4
-  sigma_y = 4
-  blurimg = cv2.GaussianBlur(fn, ksize, sigma_x, sigma_y, cv2.BORDER_REPLICATE)
-  cv2.imshow("bin", blurimg)
-  cv2.imwrite("./blurimg.jpg", blurimg)
-  # Just a placeholder
-  cv2.imwrite("./rectimg.jpg", blurimg)
+def blurImage(src):
+  ksize = (9, 9);
+  sigma_x = 4;
+  sigma_y = 4;
+  blurimg = cv2.GaussianBlur(src, ksize, sigma_x,
+                             sigma_y, cv2.BORDER_REPLICATE);
   return blurimg;
 
 
@@ -58,150 +61,120 @@ def partialDer(src):
 
 # Do this element-wise through the full image
 # http://bit.ly/163n9ci
-def huberLoss(eigs):
+def huberLoss(eigs, huberAlpha):
   # One may not be the best alpha term, but we'll start here.
-  alpha = 1;
-  flag = eigs > alpha;
-  huberMask = np.greater(np.abs(eigs), alpha);
+  huberAlpha = 1;
+  flag = eigs > huberAlpha;
+  huberMask = np.greater(np.abs(eigs), huberAlpha);
   return (~huberMask * (0.5 * np.square(eigs))
-          - huberMask * (alpha * (0.5 * alpha - abs(eigs))));
+          - huberMask * (huberAlpha * (0.5 * huberAlpha - abs(eigs))));
 
 
 # http://bit.ly/1sewX7O
-def calcGradJ(src, rows, cols, MOne, MTwo, Theta, g):
-  laplacianKernel = np.array([[0,  1,  0],
-                              [1, -4,  1],
-                              [0,  1,  0]]);
-  doubleKernel = np.array([[0, -1,  0],
-                           [1,  0,  1],
-                           [0, -1,  0]]);
-  partialKernel = np.array([[ 1, 0, -1],
-                            [ 0, 0,  0],
-                            [-1, 0,  1]]);
-  fOutput = np.zeros((rows, cols));
-  gOutput = np.zeros((rows, cols));
-  ##############
-  # 1. Compute kernel on f
-  for j in range(1, rows - 1):
-    # Access the following rows
-    previous = src[j - 1, :];
-    current = src[j, :];
-    next = src[j + 1, :];
-    for i in range(1, cols - 1):
-      kernelTOne = np.dot(laplacianKernel.T,
-                          np.dot(MOne[j, i], laplacianKernel));
-      kernelTTwo = np.dot(doubleKernel.T,
-                          np.dot(Theta[j, i], doubleKernel));
-      kernelTThree = np.dot(partialKernel.T,
-                            np.dot(Theta[j, i], partialKernel));
-      kernelCombined = kernelTOne + kernelTTwo + kernelTThree;
-      # Endpoint is weird for numpy
-      superpixel = src[j - 1 : j + 2, i - 1 : i + 2];
-      fOutput[j, i] = np.sum(np.dot(kernelCombined, superpixel));
-
-  # Zero out the other rows
-  fOutput[0, :] = np.zeros((1, cols));
-  fOutput[rows - 1, :] = np.zeros((1, cols));
-  fOutput[:, 0] = np.zeros((rows));
-  fOutput[:, cols - 1] = np.zeros((rows));
-
-  ##############
-  # 2. Compute kernel on g
-  for j in range(1, rows - 1):
-    # Access the following rows
-    previous = src[j - 1, :];
-    current = src[j, :];
-    next = src[j + 1, :];
-    for i in range(1, cols - 1):
-      kernelG = np.dot(laplacianKernel.T, MOne[j, i]);
-      # Endpoint is weird for numpy
-      superpixel = g[j - 1 : j + 2, i - 1 : i + 2];
-      gOutput[j, i] = np.sum(np.dot(kernelG, superpixel));
-
-  # Zero out the other rows
-  gOutput[0, :] = np.zeros((1, cols));
-  gOutput[rows - 1, :] = np.zeros((1, cols));
-  gOutput[:, 0] = np.zeros((rows));
-  gOutput[:, cols - 1] = np.zeros((rows));
-
-  return (fOutput, gOutput);
-
+def calcGradJ(src, MOne, MTwo, Theta, g):
+  superMOne = laplacian(laplacian(MOne));
+  superThetaOne = negLaplacian(negLaplacian(Theta));
+  superThetaTwo = partialDer(partialDer(Theta));
+  superFKernel = np.dot(.5, (superMOne + superThetaOne + superThetaTwo) * src);
+  superGKernel = np.dot(.5, laplacian(MTwo) * g);
+  return (superFKernel + superGKernel);
 
 
 ##################################
 # MAIN FUNCTION
 ##################################
 if __name__ == '__main__':
-  fn = cv2.imread('./tree.jpg', 0)
-  blurimg = blurImage(fn)
-  rows, cols = blurimg.shape
+  src = cv2.imread('./tree.jpg', 0)
+  # Our y
+  y = blurImage(src)
+  # cv2.imshow("initial", y);
+  # cv2.waitKey(0);
+  # A good initial guess for our image
+  f = y;
+  maxiter = 100;
+  huberAlpha = .5;
+  backtrackAlpha = .02;
+  backtrackBeta = .5;
+  gradWeight = 5;  # Represents lambda in paper
+  tau = 2; # No idea what this should be
+  epsilon = 1e-5;
 
-  #################
-  # CALCULATE DERIVATIVES
-  #################
-  # AOne: The laplacian
-  # http://bit.ly/12je4JY
-  AOne = laplacian(blurimg);
+  for i in range(1, maxiter):
+    print "Iteration: "
+    print i
+    #################
+    # CALCULATE DERIVATIVES
+    #################
+    # AOne: The laplacian
+    # http://bit.ly/12je4JY
+    AOne = laplacian(f);
+    # ATwo: The negative laplacian? Something like that.
+    # It's the difference of two convolutions
+    ATwo = negLaplacian(f);
+    # AThree: Partial derivatives
+    AThree = partialDer(f);
 
-  # ATwo: The negative laplacian? Something like that.
-  # It's the difference of two convolutions
-  ATwo = negLaplacian(blurimg);
-  cv2.imwrite("ATwo.png", ATwo)
+    #################
+    # CALCULATE EIGENVALUES
+    #################
+    eigsMax = AOne + np.sqrt(np.square(ATwo) + np.square(AThree));
+    eigsMin = AOne - np.sqrt(np.square(ATwo) + np.square(AThree));
+    eigsMax[eigsMax == 0.0] = epsilon
+    eigsMin[eigsMin == 0.0] = epsilon
+    eigsDiff = np.abs(eigsMax) - np.abs(eigsMin);
 
-  # AThree: Partial derivatives
-  AThree = partialDer(blurimg);
-  cv2.imwrite("AThree.png", AThree)
+    # Find JReg
+    huberMax = huberLoss(eigsMax, huberAlpha);
+    huberMin = huberLoss(eigsMin, huberAlpha);
+    huberDiff = huberLoss(eigsDiff, huberAlpha);
 
-  # Well that was stupid easy.
+    JReg = np.sum(.5 * (huberMax + huberMin + huberDiff));
 
-  #################
-  # CALCULATE EIGENVALUES
-  #################
+    #################
+    # CALCULATE VALUE
+    #################
 
-  eigsMax = AOne + np.sqrt(np.square(ATwo) + np.square(AThree));
-  eigsMin = AOne - np.sqrt(np.square(ATwo) + np.square(AThree));
-  eigsDiff = np.abs(eigsMax) - np.abs(eigsMin);
-  print "Found max and min eigenvalues"
+    val = costFunc(y, f, tau, JReg);
+    print val;
 
-  # Find JReg
-  huberMax = huberLoss(eigsMax);
-  huberMin = huberLoss(eigsMin);
-  huberDiff = huberLoss(eigsDiff);
-  print "Found Huber norm of eigen pairs"
+    # # Find grad_JReg
+    # All math here is element-wise
+    g = np.sqrt(np.square(AOne) + np.square(ATwo));
+    g[g == 0.0] = epsilon;
 
-  JReg = np.sum(.5 *
-                (huberMax + huberMin + huberDiff));
-  print "Found JReg, the regularization term. It's value is"
-  print JReg
+    MOne = (np.true_divide((1 + np.sign(eigsDiff)), huberMax)
+            + np.true_divide((1 - np.sign(eigsDiff)), huberMin));
+    MOne = np.nan_to_num(MOne);
+    MTwo = (np.true_divide((1 + np.sign(eigsDiff)), huberMax)
+            - np.true_divide((1 - np.sign(eigsDiff)), huberMin));
+    MTwo = np.nan_to_num(MTwo);
+    Theta = (np.true_divide(np.sign(eigsMax) * (1 + np.sign(eigsDiff)), g)
+             - np.true_divide(np.sign(eigsMin) * (1 - np.sign(eigsDiff)), g));
+    # Figure this is appropriate
+    Theta = np.nan_to_num(Theta);
+    # Find gradJReg, used in the final optimization. Just elementwise addition.
+    gradJReg = calcGradJ(f, MOne, MTwo, Theta, g);
+    grad = -blurImage(y - blurImage(f)) + np.dot((gradWeight * .5), gradJReg);
 
-  # # Find grad_JReg
-  # All math here is element-wise
-  g = np.sqrt(np.square(AOne) + np.square(ATwo));
-  print "Shape of g: "
-  print g.shape
+    delF = -grad;
+    # Cutoff point, checked after step 1
+    if np.linalg.norm(grad) <= epsilon:
+      print "Iterations"
+      print i;
+      cv2.imwrite("./blurimg.jpg", f);
 
-  MOne = (np.true_divide((1 + np.sign(eigsDiff)), huberMax)
-           + np.true_divide((1 - np.sign(eigsDiff)), huberMax));
-  MOne = np.nan_to_num(MOne);
-  MTwo = (np.true_divide((1 + np.sign(eigsDiff)), huberMax)
-           - np.true_divide((1 - np.sign(eigsDiff)), huberMax));
-  MTwo = np.nan_to_num(MTwo);
-  print "Found M1 and M2"
+    # Else we keep going!
+    # 2. Line Search
+    t = 1
 
-  Theta = (np.true_divide(np.sign(eigsMax) * (1 + np.sign(eigsDiff)), g)
-           - np.true_divide(np.sign(eigsMin) * (1 + np.sign(eigsDiff)), g));
-  # Figure this is appropriate
-  Theta = np.nan_to_num(Theta);
-  print "Found Theta. Shape:"
-  print Theta.shape
+    # Search for optimal f value
+    valStep = costFunc(y, f + np.dot(t, delF), tau, JReg);
+    while np.any(valStep
+                 > (val + backtrackAlpha * t
+                    * np.dot(np.transpose(grad), delF))):
+      t = t * backtrackBeta;
+      valStep = costFunc(y, f + np.dot(t, delF), tau, JReg);
 
-  # # Find gradJReg, used in the final optimization. Just elementwise addition.
-  (fOutput, gOutput) = calcGradJ(blurimg, rows, cols, MOne, MTwo, Theta, g);
-  gradJReg = np.dot(.5, fOutput) + np.dot(.5, gOutput);
-  print "Found the gradient for the regularizer!"
-  print gradJReg.shape
-
-  grad = 
-  ###################
-  # /Optimization iteration here
-  ###################
+    # 3. Update to next step
+    f = f + np.dot(t, delF);
+    cv2.imwrite("./results/current iteration"+bin(i)+".jpg", f);

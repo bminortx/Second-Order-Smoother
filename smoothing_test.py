@@ -10,7 +10,7 @@ def compare_img(orig_img, rect_img):
     return img_norm
 
 def negLaplacianTest(src):
-    # Showing that the kernels do the exact same thing. 
+    # Showing that the kernels do the exact same thing.
       # Horizontally
     horz_double_kernel = [[0,  0,  0],
                           [1, -2,  1],
@@ -57,7 +57,7 @@ if __name__ == '__main__':
     # Import as grayscale
     fn = './tree.jpg'
     blur_fn = './blurimg.jpg'
-    rect_fn = './rectimg.jpg'
+    rect_fn = './results/current iteration0b100.jpg'
     img = cv2.imread(fn, 0)
     blur_img = cv2.imread(blur_fn, 0)
     rect_img = cv2.imread(rect_fn, 0)
