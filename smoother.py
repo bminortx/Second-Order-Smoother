@@ -7,6 +7,8 @@
 # Handy write-up of rderivative-based image operations:
 # http://bit.ly/1AhiZHc
 
+# TODO: Might have to put in divisors for derivative kernels
+
 import numpy as np
 import scipy.linalg
 import cv2
@@ -73,7 +75,7 @@ def calcGradJ(src, rows, cols, MOne, MTwo, Theta, g):
   doubleKernel = np.array([[0, -1,  0],
                            [1,  0,  1],
                            [0, -1,  0]]);
-  partialkernel = np.array([[ 1, 0, -1],
+  partialKernel = np.array([[ 1, 0, -1],
                             [ 0, 0,  0],
                             [-1, 0,  1]]);
   fOutput = np.zeros((rows, cols));
@@ -90,12 +92,12 @@ def calcGradJ(src, rows, cols, MOne, MTwo, Theta, g):
                           np.dot(MOne[j, i], laplacianKernel));
       kernelTTwo = np.dot(doubleKernel.T,
                           np.dot(Theta[j, i], doubleKernel));
-      kernelTThree = np.dot(partialkernel.T,
+      kernelTThree = np.dot(partialKernel.T,
                             np.dot(Theta[j, i], partialKernel));
       kernelCombined = kernelTOne + kernelTTwo + kernelTThree;
       # Endpoint is weird for numpy
       superpixel = src[j - 1 : j + 2, i - 1 : i + 2];
-      fOutput[j, i] = np.sum(np.dot(kernelTOne, superpixel));
+      fOutput[j, i] = np.sum(np.dot(kernelCombined, superpixel));
 
   # Zero out the other rows
   fOutput[0, :] = np.zeros((1, cols));
@@ -111,9 +113,10 @@ def calcGradJ(src, rows, cols, MOne, MTwo, Theta, g):
     current = src[j, :];
     next = src[j + 1, :];
     for i in range(1, cols - 1):
-    # TODO: Place custom kernel here
-      gOutput[j, i] = (5 * current[i] - current[i - 1]
-                      - current[i + 1] - previous[i] - next[i]);
+      kernelG = np.dot(laplacianKernel.T, MOne[j, i]);
+      # Endpoint is weird for numpy
+      superpixel = g[j - 1 : j + 2, i - 1 : i + 2];
+      gOutput[j, i] = np.sum(np.dot(kernelG, superpixel));
 
   # Zero out the other rows
   gOutput[0, :] = np.zeros((1, cols));
@@ -157,7 +160,7 @@ if __name__ == '__main__':
 
   eigsMax = AOne + np.sqrt(np.square(ATwo) + np.square(AThree));
   eigsMin = AOne - np.sqrt(np.square(ATwo) + np.square(AThree));
-  eigsDiff = eigsMax - eigsMin;
+  eigsDiff = np.abs(eigsMax) - np.abs(eigsMin);
   print "Found max and min eigenvalues"
 
   # Find JReg
@@ -194,9 +197,11 @@ if __name__ == '__main__':
 
   # # Find gradJReg, used in the final optimization. Just elementwise addition.
   (fOutput, gOutput) = calcGradJ(blurimg, rows, cols, MOne, MTwo, Theta, g);
-  gradJReg = fOutput + gOutput;
+  gradJReg = np.dot(.5, fOutput) + np.dot(.5, gOutput);
   print "Found the gradient for the regularizer!"
+  print gradJReg.shape
 
+  grad = 
   ###################
   # /Optimization iteration here
   ###################
