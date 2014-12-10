@@ -17,8 +17,8 @@ import time
 
 def costFunc(y, f, tau, JReg):
   imageCost = y - blurImage(f);
-  # print .5 * np.sum(imageCost * imageCost) + tau * JReg;
-  return .5 * np.square(np.linalg.norm(imageCost)) + tau * JReg;
+  print np.linalg.norm(imageCost)
+  return .5 * np.linalg.norm(np.square(imageCost)) + tau * JReg;
 
 
 # Apply some gaussian blur to this biznitch
@@ -75,8 +75,8 @@ def calcGradJ(src, MOne, MTwo, Theta, g):
   superMOne = laplacian(laplacian(MOne));
   superThetaOne = negLaplacian(negLaplacian(Theta));
   superThetaTwo = partialDer(partialDer(Theta));
-  superFKernel = np.dot(.5, (superMOne + superThetaOne + superThetaTwo) * src);
-  superGKernel = np.dot(.5, laplacian(MTwo) * g);
+  superFKernel = .5 * (superMOne + superThetaOne + superThetaTwo) * src;
+  superGKernel = .5 * laplacian(MTwo) * g;
   return (superFKernel + superGKernel);
 
 
@@ -90,18 +90,21 @@ if __name__ == '__main__':
   # cv2.imshow("initial", y);
   # cv2.waitKey(0);
   # A good initial guess for our image
-  f = y;
+  f = np.zeros((y.shape[0], y.shape[1]));
   maxiter = 100;
   huberAlpha = .5;
   backtrackAlpha = .02;
-  backtrackBeta = .5;
-  gradWeight = 5;  # Represents lambda in paper
-  tau = 2; # No idea what this should be
+  backtrackBeta = .95;
+  gradWeight = .5;  # Represents lambda in paper
+  tau = .5; # No idea what this should be
   epsilon = 1e-5;
 
   for i in range(1, maxiter):
     print "Iteration: "
     print i
+    cv2.imshow("F", f / 255.0);
+    cv2.waitKey(0)
+
     #################
     # CALCULATE DERIVATIVES
     #################
@@ -134,8 +137,8 @@ if __name__ == '__main__':
     # CALCULATE VALUE
     #################
 
-    val = costFunc(y, f, tau, JReg);
-    print val;
+    current_cost = costFunc(y, f, tau, JReg);
+    print current_cost;
 
     # # Find grad_JReg
     # All math here is element-wise
@@ -144,21 +147,20 @@ if __name__ == '__main__':
 
     MOne = (np.true_divide((1 + np.sign(eigsDiff)), huberMax)
             + np.true_divide((1 - np.sign(eigsDiff)), huberMin));
-    MOne = np.nan_to_num(MOne);
+    # MOne = np.nan_to_num(MOne);
     MTwo = (np.true_divide((1 + np.sign(eigsDiff)), huberMax)
             - np.true_divide((1 - np.sign(eigsDiff)), huberMin));
-    MTwo = np.nan_to_num(MTwo);
+    # MTwo = np.nan_to_num(MTwo);
     Theta = (np.true_divide(np.sign(eigsMax) * (1 + np.sign(eigsDiff)), g)
              - np.true_divide(np.sign(eigsMin) * (1 - np.sign(eigsDiff)), g));
     # Figure this is appropriate
-    Theta = np.nan_to_num(Theta);
+    # Theta = np.nan_to_num(Theta);
     # Find gradJReg, used in the final optimization. Just elementwise addition.
     gradJReg = calcGradJ(f, MOne, MTwo, Theta, g);
-    grad = -blurImage(y - blurImage(f)) + np.dot((gradWeight * .5), gradJReg);
-
+    grad = -blurImage(y - blurImage(f)) + (gradWeight * .5) * gradJReg;
     delF = -grad;
     # Cutoff point, checked after step 1
-    if np.linalg.norm(grad) <= epsilon:
+    if np.linalg.norm(np.abs(grad)) <= epsilon:
       print "Iterations"
       print i;
       cv2.imwrite("./blurimg.jpg", f);
@@ -167,14 +169,33 @@ if __name__ == '__main__':
     # 2. Line Search
     t = 1
 
-    # Search for optimal f value
-    valStep = costFunc(y, f + np.dot(t, delF), tau, JReg);
-    while np.any(valStep
-                 > (val + backtrackAlpha * t
-                    * np.dot(np.transpose(grad), delF))):
+    while True:
+      # We're not in a pixel range
+      if np.all(f + np.dot(t, delF) <= 255) and np.all(f + np.dot(t, delF) >= 0):
+        print "Max: ", np.max(np.dot(t, delF));
+        print "In pixel range"
+        print "t: ", t;
+        break
       t = t * backtrackBeta;
-      valStep = costFunc(y, f + np.dot(t, delF), tau, JReg);
+
+
+    # while True:
+    #   # Search for optimal f value
+    #   updated_cost = costFunc(y, f + np.dot(t, delF), tau, JReg);
+    #   gradient_based_cost_estimate = (
+    #     current_cost + backtrackAlpha * t
+    #     * np.linalg.norm(np.square(grad)));
+    #   print "Updated: {}, Estimate: {}".format(updated_cost,
+    #                                            gradient_based_cost_estimate)
+    #   if updated_cost < gradient_based_cost_estimate or t < 1e-10:
+    #     break
+    #   t = t * backtrackBeta;
 
     # 3. Update to next step
+    print "t: ", t;
     f = f + np.dot(t, delF);
+    print "change: ", np.dot(t, delF);
+    print "difference: ", f - np.dot(t, delF);
+    print "Max f: ", np.max(f);
+    print "Min f: ", np.min(f);
     cv2.imwrite("./results/current iteration"+bin(i)+".jpg", f);

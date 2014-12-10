@@ -57,7 +57,7 @@ if __name__ == '__main__':
     # Import as grayscale
     fn = './tree.jpg'
     blur_fn = './blurimg.jpg'
-    rect_fn = './results/current iteration0b100.jpg'
+    rect_fn = './results/current iteration0b110010.jpg'
     img = cv2.imread(fn, 0)
     blur_img = cv2.imread(blur_fn, 0)
     rect_img = cv2.imread(rect_fn, 0)
