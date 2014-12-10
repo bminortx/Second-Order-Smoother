@@ -21,6 +21,13 @@ def costFunc(y, f, tau, JReg):
   return .5 * np.linalg.norm(np.square(imageCost)) + tau * JReg;
 
 
+def compare_img(orig_img, rect_img):
+  img_diff = orig_img - rect_img
+  print img_diff.shape
+  img_norm = np.linalg.norm(img_diff, 2)
+  return img_norm
+
+
 # Apply some gaussian blur to this biznitch
 def blurImage(src):
   ksize = (9, 9);
@@ -31,31 +38,38 @@ def blurImage(src):
   return blurimg;
 
 
-def laplacian(src):
+def laplacian(src, boolTranspose):
   laplacian_kernel = [[0,  1,  0],
                       [1, -4,  1],
                       [0,  1,  0]];
   laplacian_kernel = np.asanyarray(laplacian_kernel);
+  if boolTranspose:
+    laplacian_kernel = laplacian_kernel.T;
   A_laplacian = cv2.filter2D(src, -1, laplacian_kernel);
   return A_laplacian;
 
 
-def negLaplacian(src):
+def negLaplacian(src, boolTranspose):
   # Combine both kernels to get this
   double_kernel = [[0, -1,  0],
                    [1,  0,  1],
                    [0, -1,  0]];
   double_kernel = np.asanyarray(double_kernel);
+  if boolTranspose:
+    double_kernel = double_kernel.T;
   ANegLap = cv2.filter2D(src, -1, double_kernel);
   return ANegLap;
 
 
-def partialDer(src):
+def partialDer(src, boolTranspose):
   # http://www.cs.uu.nl/docs/vakken/ibv/reader/chapter5.pdf
   partial_kernel = [[ 1, 0, -1],
                     [ 0, 0,  0],
                     [-1, 0,  1]];
   partial_kernel = np.asanyarray(partial_kernel);
+  if boolTranspose:
+    partial_kernel = partial_kernel.T;
+  print partial_kernel;
   return cv2.filter2D(src, -1, partial_kernel);
 
 
@@ -72,11 +86,11 @@ def huberLoss(eigs, huberAlpha):
 
 # http://bit.ly/1sewX7O
 def calcGradJ(src, MOne, MTwo, Theta, g):
-  superMOne = laplacian(laplacian(MOne));
-  superThetaOne = negLaplacian(negLaplacian(Theta));
-  superThetaTwo = partialDer(partialDer(Theta));
+  superMOne = laplacian(laplacian(MOne, True), False);
+  superThetaOne = negLaplacian(negLaplacian(Theta, True), False);
+  superThetaTwo = partialDer(partialDer(Theta, True), False);
   superFKernel = .5 * (superMOne + superThetaOne + superThetaTwo) * src;
-  superGKernel = .5 * laplacian(MTwo) * g;
+  superGKernel = .5 * laplacian(MTwo, True) * g;
   return (superFKernel + superGKernel);
 
 
@@ -86,7 +100,7 @@ def calcGradJ(src, MOne, MTwo, Theta, g):
 if __name__ == '__main__':
   src = cv2.imread('./tree.jpg', 0)
   # Our y
-  y = blurImage(src)
+  y = blurImage(src);
   # cv2.imshow("initial", y);
   # cv2.waitKey(0);
   # A good initial guess for our image
@@ -94,8 +108,8 @@ if __name__ == '__main__':
   maxiter = 100;
   huberAlpha = .5;
   backtrackAlpha = .02;
-  backtrackBeta = .95;
-  gradWeight = .5;  # Represents lambda in paper
+  backtrackBeta = .99;
+  gradWeight = .1;  # Represents lambda in paper
   tau = .5; # No idea what this should be
   epsilon = 1e-5;
 
@@ -110,27 +124,26 @@ if __name__ == '__main__':
     #################
     # AOne: The laplacian
     # http://bit.ly/12je4JY
-    AOne = laplacian(f);
+    AOne = laplacian(f, False);
     # ATwo: The negative laplacian? Something like that.
     # It's the difference of two convolutions
-    ATwo = negLaplacian(f);
+    ATwo = negLaplacian(f, False);
     # AThree: Partial derivatives
-    AThree = partialDer(f);
+    AThree = partialDer(f, False);
 
     #################
     # CALCULATE EIGENVALUES
     #################
     eigsMax = AOne + np.sqrt(np.square(ATwo) + np.square(AThree));
     eigsMin = AOne - np.sqrt(np.square(ATwo) + np.square(AThree));
-    eigsMax[eigsMax == 0.0] = epsilon
-    eigsMin[eigsMin == 0.0] = epsilon
+    eigsMax[eigsMax == 0.0] = epsilon;
+    eigsMin[eigsMin == 0.0] = epsilon;
     eigsDiff = np.abs(eigsMax) - np.abs(eigsMin);
 
     # Find JReg
     huberMax = huberLoss(eigsMax, huberAlpha);
     huberMin = huberLoss(eigsMin, huberAlpha);
     huberDiff = huberLoss(eigsDiff, huberAlpha);
-
     JReg = np.sum(.5 * (huberMax + huberMin + huberDiff));
 
     #################
@@ -157,9 +170,12 @@ if __name__ == '__main__':
     # Theta = np.nan_to_num(Theta);
     # Find gradJReg, used in the final optimization. Just elementwise addition.
     gradJReg = calcGradJ(f, MOne, MTwo, Theta, g);
+    print "difference between src and y: ", compare_img(src, y);
+    print "difference between src and f: ", compare_img(src, f);
     grad = -blurImage(y - blurImage(f)) + (gradWeight * .5) * gradJReg;
     delF = -grad;
     # Cutoff point, checked after step 1
+    print "norm: ", np.linalg.norm(np.abs(grad))
     if np.linalg.norm(np.abs(grad)) <= epsilon:
       print "Iterations"
       print i;
@@ -171,31 +187,30 @@ if __name__ == '__main__':
 
     while True:
       # We're not in a pixel range
-      if np.all(f + np.dot(t, delF) <= 255) and np.all(f + np.dot(t, delF) >= 0):
+      if (np.all(f + np.dot(t, delF) <= 255) and
+          np.all(f + np.dot(t, delF) >= 0)):
         print "Max: ", np.max(np.dot(t, delF));
+        print "size of delta: ", np.dot(t, delF).shape
         print "In pixel range"
         print "t: ", t;
         break
       t = t * backtrackBeta;
 
-
     # while True:
-    #   # Search for optimal f value
-    #   updated_cost = costFunc(y, f + np.dot(t, delF), tau, JReg);
-    #   gradient_based_cost_estimate = (
-    #     current_cost + backtrackAlpha * t
-    #     * np.linalg.norm(np.square(grad)));
-    #   print "Updated: {}, Estimate: {}".format(updated_cost,
-    #                                            gradient_based_cost_estimate)
-    #   if updated_cost < gradient_based_cost_estimate or t < 1e-10:
-    #     break
-    #   t = t * backtrackBeta;
+    #  # Search for optimal f value
+    #  updated_cost = costFunc(y, f + np.dot(t, delF), tau, JReg);
+    #  gradient_based_cost_estimate = (
+    #    current_cost + backtrackAlpha * t
+    #    * np.linalg.norm(np.square(grad)));
+    #  print "Updated: {}, Estimate: {}".format(updated_cost,
+    #                                           gradient_based_cost_estimate)
+    #  if updated_cost < gradient_based_cost_estimate or t < 1e-10:
+    #    break
+    #  t = t * backtrackBeta;
 
     # 3. Update to next step
     print "t: ", t;
     f = f + np.dot(t, delF);
-    print "change: ", np.dot(t, delF);
-    print "difference: ", f - np.dot(t, delF);
     print "Max f: ", np.max(f);
     print "Min f: ", np.min(f);
     cv2.imwrite("./results/current iteration"+bin(i)+".jpg", f);
