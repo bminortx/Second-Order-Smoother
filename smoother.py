@@ -13,20 +13,23 @@ import numpy as np
 import scipy.linalg
 import cv2
 import time
+import sys
 
 
 def costFunc(y, f, tau, JReg):
   imageCost = y - blurImage(f);
-  print np.linalg.norm(imageCost)
   return .5 * np.linalg.norm(np.square(imageCost)) + tau * JReg;
 
 
 def compare_img(orig_img, rect_img):
   img_diff = orig_img - rect_img
-  print img_diff.shape
   img_norm = np.linalg.norm(img_diff, 2)
   return img_norm
 
+
+def noisyImage(src):
+  noise = 20 * np.random.randn(src.shape[0], src.shape[1]);
+  return src + noise;
 
 # Apply some gaussian blur to this biznitch
 def blurImage(src):
@@ -69,7 +72,6 @@ def partialDer(src, boolTranspose):
   partial_kernel = np.asanyarray(partial_kernel);
   if boolTranspose:
     partial_kernel = partial_kernel.T;
-  print partial_kernel;
   return cv2.filter2D(src, -1, partial_kernel);
 
 
@@ -99,25 +101,27 @@ def calcGradJ(src, MOne, MTwo, Theta, g):
 ##################################
 if __name__ == '__main__':
   src = cv2.imread('./tree.jpg', 0)
+  cv2.imwrite('./bwtree.jpg', src)
   # Our y
-  y = blurImage(src);
+  y = noisyImage(src);
+  cv2.imwrite('./noisyimg.jpg', y)
   # cv2.imshow("initial", y);
   # cv2.waitKey(0);
   # A good initial guess for our image
   f = np.zeros((y.shape[0], y.shape[1]));
+  prev_f = y;
   maxiter = 100;
   huberAlpha = .5;
   backtrackAlpha = .02;
-  backtrackBeta = .99;
+  backtrackBeta = .5;
   gradWeight = .1;  # Represents lambda in paper
+  norm_diff = 0;
   tau = .5; # No idea what this should be
-  epsilon = 1e-5;
+  epsilon = .00001;
 
   for i in range(1, maxiter):
     print "Iteration: "
     print i
-    cv2.imshow("F", f / 255.0);
-    cv2.waitKey(0)
 
     #################
     # CALCULATE DERIVATIVES
@@ -175,42 +179,27 @@ if __name__ == '__main__':
     grad = -blurImage(y - blurImage(f)) + (gradWeight * .5) * gradJReg;
     delF = -grad;
     # Cutoff point, checked after step 1
-    print "norm: ", np.linalg.norm(np.abs(grad))
-    if np.linalg.norm(np.abs(grad)) <= epsilon:
+    print "norm: ", np.linalg.norm(grad);
+    print "diff: ", np.linalg.norm(f - prev_f);
+    if (np.linalg.norm(np.abs(grad)) <= epsilon):#  or
+        # np.linalg.norm(f - prev_f) <= epsilon):
       print "Iterations"
       print i;
-      cv2.imwrite("./blurimg.jpg", f);
+      cv2.imwrite("./rectimg.jpg", f);
+      sys.exit();
 
     # Else we keep going!
     # 2. Line Search
-    t = 1
+    t = 1;
 
     while True:
       # We're not in a pixel range
       if (np.all(f + np.dot(t, delF) <= 255) and
           np.all(f + np.dot(t, delF) >= 0)):
-        print "Max: ", np.max(np.dot(t, delF));
-        print "size of delta: ", np.dot(t, delF).shape
-        print "In pixel range"
-        print "t: ", t;
         break
       t = t * backtrackBeta;
 
-    # while True:
-    #  # Search for optimal f value
-    #  updated_cost = costFunc(y, f + np.dot(t, delF), tau, JReg);
-    #  gradient_based_cost_estimate = (
-    #    current_cost + backtrackAlpha * t
-    #    * np.linalg.norm(np.square(grad)));
-    #  print "Updated: {}, Estimate: {}".format(updated_cost,
-    #                                           gradient_based_cost_estimate)
-    #  if updated_cost < gradient_based_cost_estimate or t < 1e-10:
-    #    break
-    #  t = t * backtrackBeta;
-
     # 3. Update to next step
-    print "t: ", t;
+    prev_f = f;
     f = f + np.dot(t, delF);
-    print "Max f: ", np.max(f);
-    print "Min f: ", np.min(f);
-    cv2.imwrite("./results/current iteration"+bin(i)+".jpg", f);
+
