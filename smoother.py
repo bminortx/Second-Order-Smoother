@@ -28,8 +28,11 @@ def compare_img(orig_img, rect_img):
 
 
 def noisyImage(src):
-  noise = 20 * np.random.randn(src.shape[0], src.shape[1]);
-  return src + noise;
+  noise = 50 * np.random.randn(src.shape[0], src.shape[1]);
+  result = src + noise
+  result[result<0] = 0;
+  result[result>255] = 255;
+  return result;
 
 # Apply some gaussian blur to this biznitch
 def blurImage(src):
@@ -88,11 +91,11 @@ def huberLoss(eigs, huberAlpha):
 
 # http://bit.ly/1sewX7O
 def calcGradJ(src, MOne, MTwo, Theta, g):
-  superMOne = laplacian(laplacian(MOne, True), False);
-  superThetaOne = negLaplacian(negLaplacian(Theta, True), False);
-  superThetaTwo = partialDer(partialDer(Theta, True), False);
+  superMOne = laplacian(laplacian(MOne, False), False);
+  superThetaOne = negLaplacian(negLaplacian(Theta, False), False);
+  superThetaTwo = partialDer(partialDer(Theta, False), False);
   superFKernel = .5 * (superMOne + superThetaOne + superThetaTwo) * src;
-  superGKernel = .5 * laplacian(MTwo, True) * g;
+  superGKernel = .5 * laplacian(MTwo, False) * g;
   return (superFKernel + superGKernel);
 
 
@@ -100,21 +103,21 @@ def calcGradJ(src, MOne, MTwo, Theta, g):
 # MAIN FUNCTION
 ##################################
 if __name__ == '__main__':
-  src = cv2.imread('./tree.jpg', 0)
-  cv2.imwrite('./bwtree.jpg', src)
+  src = cv2.imread('./tree.jpg', 0);
+  cv2.imwrite('./bwtree.jpg', src);
   # Our y
   y = noisyImage(src);
-  cv2.imwrite('./noisyimg.jpg', y)
+  cv2.imwrite('./noisyimg.jpg', y);
   # cv2.imshow("initial", y);
   # cv2.waitKey(0);
   # A good initial guess for our image
-  f = np.zeros((y.shape[0], y.shape[1]));
+  f = y;
   prev_f = y;
   maxiter = 100;
   huberAlpha = .5;
   backtrackAlpha = .02;
   backtrackBeta = .5;
-  gradWeight = .1;  # Represents lambda in paper
+  gradWeight = .5;  # Represents lambda in paper
   norm_diff = 0;
   tau = .5; # No idea what this should be
   epsilon = .00001;
@@ -155,9 +158,9 @@ if __name__ == '__main__':
     #################
 
     current_cost = costFunc(y, f, tau, JReg);
-    print current_cost;
+    print "Current cost: ", current_cost;
 
-    # # Find grad_JReg
+    # Find grad_JReg
     # All math here is element-wise
     g = np.sqrt(np.square(AOne) + np.square(ATwo));
     g[g == 0.0] = epsilon;
@@ -198,6 +201,9 @@ if __name__ == '__main__':
           np.all(f + np.dot(t, delF) >= 0)):
         break
       t = t * backtrackBeta;
+      print np.max((f + np.dot(t, delF)))
+      print np.min((f + np.dot(t, delF)))
+      print "T: ", t;
 
     # 3. Update to next step
     prev_f = f;
