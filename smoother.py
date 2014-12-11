@@ -29,18 +29,18 @@ def compare_img(orig_img, rect_img):
 
 def convolve(src):
   # Start with identity
-  convolve_kernel = [[0, 0, 0],
-                     [0, 1, 0],
-                     [0, 0, 0]];
-  convolve_kernel = np.asanyarray(convolve_kernel);
-  # cv2.filter2D(src, -1, convolve_kernel);
+  # convolve_kernel = [[0, 0, 0],
+  #                    [0, 1, 0],
+  #                    [0, 0, 0]];
+  # convolve_kernel = np.asanyarray(convolve_kernel);
+  # A_convolve = cv2.filter2D(src, -1, convolve_kernel);
   A_convolve = noisyImage(src);
   return A_convolve;
 
 def noisyImage(src):
   noise = np.zeros((src.shape[0], src.shape[1]));
-  cv2.randn(noise, 0, 4);
-  result = src + noise
+  cv2.randn(noise, 0, 10);
+  result = src + 3 * noise
   result[result<0] = 0;
   result[result>255] = 255;
   return result;
@@ -109,22 +109,20 @@ if __name__ == '__main__':
   src = cv2.imread('./tree.jpg', 0);
   cv2.imwrite('./bwtree.jpg', src);
   # Our y
-  y = noisyImage(src);
+  y = blurImage(noisyImage(src));
   cv2.imwrite('./noisyimg.jpg', y);
   # cv2.imshow("initial", y);
   # cv2.waitKey(0);
   # A good initial guess for our image
   f = y;
   prev_f = np.zeros((y.shape[0], y.shape[1]));
-  prev_cost = 0;
-
+  prev_cost = 1e50;
   maxiter = 1000;
   huberAlpha = 1;
-  backtrackAlpha = .5;
+  backtrackAlpha = .25;
   backtrackBeta = .5;
-  gradWeight = .1;  # Represents lambda in paper
+  gradWeight = .9;  # Represents lambda in paper
   norm_diff = 0;
-  tau = 1; # No idea what this should be
   epsilon = .0001;
 
   for i in range(1, maxiter):
@@ -146,12 +144,11 @@ if __name__ == '__main__':
     #################
     # CALCULATE EIGENVALUES
     #################
-    eigsMax = .5 * (AOne + np.sqrt(np.square(ATwo) + np.square(AThree)));
-    eigsMin = .5 * (AOne - np.sqrt(np.square(ATwo) + np.square(AThree)));
+    eigsMax = (AOne + np.sqrt(np.square(ATwo) + np.square(2 * AThree)));
+    eigsMin = (AOne - np.sqrt(np.square(ATwo) + np.square(2 * AThree)));
     eigsMax[eigsMax <= 0.0] = epsilon;
     eigsMin[eigsMin <= 0.0] = epsilon;
     eigsDiff = np.abs(eigsMax) - np.abs(eigsMin);
-
     # Find JReg
     huberMax = huberLoss(eigsMax, huberAlpha);
     huberMin = huberLoss(eigsMin, huberAlpha);
@@ -162,10 +159,14 @@ if __name__ == '__main__':
     #################
     # CALCULATE VALUE
     #################
-
-    current_cost = costFunc(y, f, tau, JReg);
-
+    tau = 40; # No idea what this should be
+    while True:
+      current_cost = costFunc(y, f, tau, JReg);
+      if current_cost < prev_cost:
+        break
+      tau = tau * backtrackBeta;
     print "Current cost: ", current_cost;
+
 
     # Find grad_JReg
     # All math here is element-wise
@@ -179,17 +180,25 @@ if __name__ == '__main__':
              - ((np.sign(eigsMin) * (1 - np.sign(eigsDiff))) / g));
     # Find gradJReg, used in the final optimization. Just elementwise addition.
     gradJReg = calcGradJ(f, MOne, MTwo, Theta, g);
-    print "Grad J Reg: ", gradJReg;
+    # print "Grad J Reg: ", gradJReg;
     # print "difference between src and y: ", compare_img(src, y);
     # print "difference between src and f: ", compare_img(src, f);
-    grad = -convolve(y - convolve(f)) + (gradWeight * .5) * gradJReg;
+    img_term = -convolve(y - convolve(f));
+    reg_term = (gradWeight * .5) * gradJReg;
+    # while True:
+    #   if np.linalg.norm(img_term) > np.linalg.norm(reg_term):
+    #     break
+    #   img_term = -convolve(y - convolve(f));
+    #   reg_term = (gradWeight * .5) * gradJReg;
+    #   gradWeight = gradWeight * backtrackBeta;
+    #   print "Gradweight: ", gradWeight;
+
+    grad = img_term + reg_term;
     delF = -grad;
     # Cutoff point, checked after step 1
-    # print "norm: ", np.linalg.norm(grad);
-    # print "diff: ", np.linalg.norm(f - prev_f);
-    if (np.linalg.norm(np.abs(grad)) <= epsilon
+    if (np.linalg.norm(grad) <= epsilon
          or
-        np.linalg.norm(f - prev_f) <= epsilon):
+        np.square(np.linalg.norm(f - prev_f)) <= epsilon):
       print "Iterations"
       print i;
       print "difference between src and y: ", compare_img(src, y);
