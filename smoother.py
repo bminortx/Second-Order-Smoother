@@ -18,7 +18,7 @@ import sys
 
 def costFunc(y, f, tau, JReg):
   imageCost = y - blurImage(f);
-  return .5 * np.linalg.norm(np.square(imageCost)) + tau * JReg;
+  return .5 * np.square(np.linalg.norm(imageCost)) + tau * JReg;
 
 
 def compare_img(orig_img, rect_img):
@@ -28,17 +28,18 @@ def compare_img(orig_img, rect_img):
 
 
 def noisyImage(src):
-  noise = 50 * np.random.randn(src.shape[0], src.shape[1]);
-  result = src + noise
+  noise = np.zeros((src.shape[0], src.shape[1]));
+  cv2.randn(noise, 0, 2);
+  result = src + 10 * noise
   result[result<0] = 0;
   result[result>255] = 255;
   return result;
 
 # Apply some gaussian blur to this biznitch
 def blurImage(src):
-  ksize = (9, 9);
-  sigma_x = 4;
-  sigma_y = 4;
+  ksize = (5, 5);
+  sigma_x = 2;
+  sigma_y = 2;
   blurimg = cv2.GaussianBlur(src, ksize, sigma_x,
                              sigma_y, cv2.BORDER_REPLICATE);
   return blurimg;
@@ -82,7 +83,7 @@ def partialDer(src, boolTranspose):
 # http://bit.ly/163n9ci
 def huberLoss(eigs, huberAlpha):
   # One may not be the best alpha term, but we'll start here.
-  huberAlpha = 1;
+  huberAlpha = .2;
   flag = eigs > huberAlpha;
   huberMask = np.greater(np.abs(eigs), huberAlpha);
   return (~huberMask * (0.5 * np.square(eigs))
@@ -111,19 +112,19 @@ if __name__ == '__main__':
   # cv2.imshow("initial", y);
   # cv2.waitKey(0);
   # A good initial guess for our image
-  f = y;
+  f = np.zeros((y.shape[0], y.shape[1]));
   prev_f = y;
-  maxiter = 100;
+  maxiter = 1000;
   huberAlpha = .5;
   backtrackAlpha = .02;
   backtrackBeta = .5;
   gradWeight = .5;  # Represents lambda in paper
   norm_diff = 0;
-  tau = .5; # No idea what this should be
-  epsilon = .00001;
+  tau = 3; # No idea what this should be
+  epsilon = .0001;
 
   for i in range(1, maxiter):
-    print "Iteration: "
+    # print "Iteration: "
     print i
 
     #################
@@ -152,6 +153,7 @@ if __name__ == '__main__':
     huberMin = huberLoss(eigsMin, huberAlpha);
     huberDiff = huberLoss(eigsDiff, huberAlpha);
     JReg = np.sum(.5 * (huberMax + huberMin + huberDiff));
+    # print JReg
 
     #################
     # CALCULATE VALUE
@@ -177,15 +179,16 @@ if __name__ == '__main__':
     # Theta = np.nan_to_num(Theta);
     # Find gradJReg, used in the final optimization. Just elementwise addition.
     gradJReg = calcGradJ(f, MOne, MTwo, Theta, g);
-    print "difference between src and y: ", compare_img(src, y);
-    print "difference between src and f: ", compare_img(src, f);
+    # print "difference between src and y: ", compare_img(src, y);
+    # print "difference between src and f: ", compare_img(src, f);
     grad = -blurImage(y - blurImage(f)) + (gradWeight * .5) * gradJReg;
     delF = -grad;
     # Cutoff point, checked after step 1
-    print "norm: ", np.linalg.norm(grad);
-    print "diff: ", np.linalg.norm(f - prev_f);
-    if (np.linalg.norm(np.abs(grad)) <= epsilon):#  or
-        # np.linalg.norm(f - prev_f) <= epsilon):
+    # print "norm: ", np.linalg.norm(grad);
+    # print "diff: ", np.linalg.norm(f - prev_f);
+    if (np.linalg.norm(np.abs(grad)) <= epsilon
+         or
+        np.linalg.norm(f - prev_f) <= epsilon):
       print "Iterations"
       print i;
       cv2.imwrite("./rectimg.jpg", f);
@@ -196,16 +199,37 @@ if __name__ == '__main__':
     t = 1;
 
     while True:
+      delta = np.dot(t, delF);
+      # delta[np.abs(delta)<1e-5] = 0;
       # We're not in a pixel range
-      if (np.all(f + np.dot(t, delF) <= 255) and
-          np.all(f + np.dot(t, delF) >= 0)):
+      if (np.all(f + delta <= 255) and
+          np.all(f + delta >= 0)):
         break
       t = t * backtrackBeta;
-      print np.max((f + np.dot(t, delF)))
-      print np.min((f + np.dot(t, delF)))
-      print "T: ", t;
+      # print np.max((f + delta))
+      # print np.min((f + delta))
+      # print "T: ", t;
+
+    # while True:
+    #   delta = np.dot(t, delF);
+    #   updated_cost = costFunc(y, f+delta, tau, JReg);
+    #   cost_bound = (current_cost + backtrackAlpha * t
+    #                 * np.dot(grad.T, delF));
+    #   print "Cost diff: ", cost_bound - updated_cost;
+    #   if updated_cost <= cost_bound:
+    #     break
+    #   t = t * backtrackBeta;
+      # print t;
+
 
     # 3. Update to next step
     prev_f = f;
-    f = f + np.dot(t, delF);
+    f = f + np.dot(t, delF)
+    f[f<0] = 0;
+    f[f>255] = 255;
 
+  # We didn't finish, but we ran out of iterations
+  print "NO MORE iterations"
+  print i;
+  cv2.imwrite("./rectimg.jpg", f);
+  # 164550856.545
