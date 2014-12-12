@@ -50,7 +50,7 @@ def noisyImage(src):
 
 # Apply some gaussian blur to this biznitch
 def blurImage(src):
-  ksize = (9, 9);
+  ksize = (3, 3);
   sigma_x = 4;
   sigma_y = 4;
   blurimg = cv2.GaussianBlur(src, ksize, sigma_x,
