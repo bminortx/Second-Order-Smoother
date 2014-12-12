@@ -7,8 +7,6 @@
 # Handy write-up of rderivative-based image operations:
 # http://bit.ly/1AhiZHc
 
-# TODO: Try A as a not-blurring kernel. Just an identity or something.
-
 import numpy as np
 import scipy.linalg
 import cv2
@@ -18,13 +16,18 @@ import sys
 
 def costFunc(y, f, tau, JReg):
   imageCost = y - convolve(f);
-  return .5 * np.sum(np.square(imageCost)) + tau * JReg;
+  cost = .5 * np.square(np.linalg.norm(imageCost)) + tau * JReg;
+  return cost
 
 
-def compare_img(orig_img, rect_img):
-  img_diff = orig_img - rect_img
-  img_norm = np.linalg.norm(img_diff, 2)
-  return img_norm
+# Calculates the ISNR
+def compare_img(orig_img, bad_img, rect_img):
+  e1 = orig_img - bad_img;
+  e2 = orig_img - rect_img;
+  E1 = np.mean(np.square(e1));
+  E2 = np.mean(np.square(e2));
+  result = 10 * np.log(E1 / E2) / np.log(10)
+  return result
 
 
 def convolve(src):
@@ -40,7 +43,7 @@ def convolve(src):
 def noisyImage(src):
   noise = np.zeros((src.shape[0], src.shape[1]));
   cv2.randn(noise, 0, 10);
-  result = src + 3 * noise
+  result = src + noise
   result[result<0] = 0;
   result[result>255] = 255;
   return result;
@@ -114,18 +117,22 @@ if __name__ == '__main__':
   # cv2.imshow("initial", y);
   # cv2.waitKey(0);
   # A good initial guess for our image
-  f = y;
-  prev_f = np.zeros((y.shape[0], y.shape[1]));
+  f = np.zeros((y.shape[0], y.shape[1]));
+  prev_f = y;
   prev_cost = 1e50;
-  maxiter = 1000;
+  maxiter = 100;
   huberAlpha = 1;
-  backtrackAlpha = .25;
+  backtrackAlpha = .02;
   backtrackBeta = .5;
-  gradWeight = .9;  # Represents lambda in paper
+  backtrackGamma = .5;
+  # gradWeight = .5;  # Represents lambda in paper
   norm_diff = 0;
-  epsilon = .0001;
+  epsilon = .0000001;
+  ISNR = compare_img(src, y, f);
 
   for i in range(1, maxiter):
+    gradWeight = 1;
+    tau = 5; # No idea what this should be
     # print "Iteration: "
     print i
 
@@ -159,14 +166,8 @@ if __name__ == '__main__':
     #################
     # CALCULATE VALUE
     #################
-    tau = 40; # No idea what this should be
-    while True:
-      current_cost = costFunc(y, f, tau, JReg);
-      if current_cost < prev_cost:
-        break
-      tau = tau * backtrackBeta;
+    current_cost = costFunc(y, f, tau, JReg);
     print "Current cost: ", current_cost;
-
 
     # Find grad_JReg
     # All math here is element-wise
@@ -178,61 +179,57 @@ if __name__ == '__main__':
             - ((1 - np.sign(eigsDiff)) / huberMin));
     Theta = (((np.sign(eigsMax) * (1 + np.sign(eigsDiff))) / g)
              - ((np.sign(eigsMin) * (1 - np.sign(eigsDiff))) / g));
-    # Find gradJReg, used in the final optimization. Just elementwise addition.
+    # Find gradJReg, used in the final optimization.
     gradJReg = calcGradJ(f, MOne, MTwo, Theta, g);
     # print "Grad J Reg: ", gradJReg;
-    # print "difference between src and y: ", compare_img(src, y);
+    ISNR = compare_img(src, y, f);
+    print "ISNR: ", ISNR
     # print "difference between src and f: ", compare_img(src, f);
     img_term = -convolve(y - convolve(f));
-    reg_term = (gradWeight * .5) * gradJReg;
-    # while True:
-    #   if np.linalg.norm(img_term) > np.linalg.norm(reg_term):
-    #     break
-    #   img_term = -convolve(y - convolve(f));
-    #   reg_term = (gradWeight * .5) * gradJReg;
-    #   gradWeight = gradWeight * backtrackBeta;
-    #   print "Gradweight: ", gradWeight;
-
+    reg_term = (tau * .5) * gradJReg;
     grad = img_term + reg_term;
     delF = -grad;
+
     # Cutoff point, checked after step 1
-    if (np.linalg.norm(grad) <= epsilon
-         or
-        np.square(np.linalg.norm(f - prev_f)) <= epsilon):
+    if (np.linalg.norm(grad) <= epsilon  or
+      np.square(np.linalg.norm(f - prev_f)) <= epsilon):
       print "Iterations"
       print i;
-      print "difference between src and y: ", compare_img(src, y);
-      print "difference between src and f: ", compare_img(src, f);
+      ISNR = compare_img(src, y, f);
+      print "New ISNR: ", ISNR
       cv2.imwrite("./rectimg.jpg", f);
       sys.exit();
 
     # Else we keep going!
     # 2. Line Search
+    # t = .02;
+    ii = 0;
+    while True:
+      img_term = -convolve(y - convolve(f + delF));
+      reg_term = (gradWeight * .5) * gradJReg;
+      grad = img_term + reg_term;
+      delF = -grad;
+      newCost = costFunc(y, f + delF, tau, JReg);
+      if (newCost < current_cost or ii > 100):
+        break
+      gradWeight = gradWeight * backtrackBeta;
+      # print "weight: ", gradWeight
+      ii = ii + 1
+
     t = 1;
+    if ii > 100:
+      while True:
+        delta = delF * t
+        newCost = costFunc(y, f + delta, tau, JReg);
+        if (newCost < current_cost):
+          break
+        t = t * backtrackGamma;
+        # print "t: ", t
 
-    while True:
-      delta = t * delF
-      # delta[np.abs(delta)<1e-5] = 0;
-      # We're not in a pixel range
-      if (np.all(f + delta <= 255) and
-          np.all(f + delta >= 0)):
-        break
-      t = t * backtrackBeta;
-
-    while True:
-      delta = t * delF;
-      # delta[np.abs(delta)<1e-5] = 0;
-      # We're not in a pixel range
-      print "new cost: ", (costFunc(y, f + delta, tau, JReg));
-      print "old cost: ", current_cost;
-      if np.any(costFunc(y, f + delta, tau, JReg) <=
-                current_cost + backtrackAlpha * t * grad * delF):
-        break
-      t = t * backtrackBeta;
 
     # 3. Update to next step
     prev_f = f;
-    f = f + t * delF
+    f = f + delF * t;
     f[f<0] = 0;
     f[f>255] = 255;
 
