@@ -232,6 +232,7 @@ if __name__ == '__main__':
     f = f + delF * t;
     f[f<0] = 0;
     f[f>255] = 255;
+    cv2.imwrite("./results/f"+str(i)+".jpg", f);
 
   # We didn't finish, but we ran out of iterations
   print "NO MORE iterations"
